@@ -163,6 +163,7 @@ _DC_ASM_WritePop:
 
 ; unsigned DCJIT_CDECL DC_ASM_WriteRet(void *dest);
 _DC_ASM_WriteRet:
+    dec DWORD [dc_asm_index]
     mov eax, [esp+4]
     mov [eax], BYTE 0xC3
     xor eax, eax
