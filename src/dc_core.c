@@ -17,7 +17,7 @@
 #include <math.h>
 
 #ifndef DC_OPTIMIZE
-#define DC_OPTIMIZE 0
+#define DC_OPTIMIZE 1
 #endif
 
 #ifndef DC_OPTIMIZE_INTRINSIC
@@ -416,7 +416,7 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
             else{
                 /* This is a little white lie, the result /was/ an immediate,
                  * but we want it to be treated as an argument. */
-                DC_X_BuildPushImmediate(ctx->ctx, bld, result.term.argument);
+                DC_X_BuildPushImmediate(ctx->ctx, bld, (float)result.term.immediate);
                 return eTermArgument;
             }
         case eTermArgument:
