@@ -245,11 +245,12 @@ static enum TermResultType parse_value(const char **source_ptr,
                 unsigned arg_num = 0, arg_name_size = 0;
             next_char:
                 {
-                    const int c = source[arg_name_size++];
+                    const int c = source[arg_name_size];
                     if(c == '_' ||
                         (c >= 'a' && c <= 'z') ||
                         (c >= 'A' && c <= 'Z') ||
                         (c & 0x80)){
+                        arg_name_size++;
                         goto next_char;
                     }
                 }
