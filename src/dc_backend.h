@@ -50,6 +50,15 @@ void DC_X_BuildDiv(struct DC_X_Context *ctx,
 void DC_X_BuildPop(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld);
 
+void DC_X_BuildSin(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld);
+
+void DC_X_BuildCos(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld);
+
+void DC_X_BuildSqrt(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld);
+
 void DC_X_AbandonCalculation(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld);
 

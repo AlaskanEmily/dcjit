@@ -94,36 +94,21 @@ void DC_X_BuildPushArg(struct DC_X_Context *ctx,
     bld->at += DC_ASM_WritePushArg(DC_X_GET_BUILDER_AT(bld), arg_num);
 }
 
-void DC_X_BuildAdd(struct DC_X_Context *ctx,
-    struct DC_X_CalculationBuilder *bld){
-    (void)ctx;
-    bld->at += DC_ASM_WriteAdd(DC_X_GET_BUILDER_AT(bld));
+#define DC_X_OP(NAME)\
+void DC_X_Build ## NAME(struct DC_X_Context *ctx,\
+    struct DC_X_CalculationBuilder *bld){\
+    (void)ctx;\
+    bld->at += DC_ASM_Write ## NAME(DC_X_GET_BUILDER_AT(bld));\
 }
 
-void DC_X_BuildSub(struct DC_X_Context *ctx,
-    struct DC_X_CalculationBuilder *bld){
-    (void)ctx;
-    bld->at += DC_ASM_WriteSub(DC_X_GET_BUILDER_AT(bld));
-}
-
-void DC_X_BuildMul(struct DC_X_Context *ctx,
-    struct DC_X_CalculationBuilder *bld){
-    (void)ctx;
-    bld->at += DC_ASM_WriteMul(DC_X_GET_BUILDER_AT(bld));
-}
-
-void DC_X_BuildDiv(struct DC_X_Context *ctx,
-    struct DC_X_CalculationBuilder *bld){
-    (void)ctx;
-    bld->at += DC_ASM_WriteDiv(DC_X_GET_BUILDER_AT(bld));
-}
-
-void DC_X_BuildPop(struct DC_X_Context *ctx,
-    struct DC_X_CalculationBuilder *bld){
-    (void)ctx;
-    bld->at += DC_ASM_WritePop(DC_X_GET_BUILDER_AT(bld));
-}
-
+DC_X_OP(Add)
+DC_X_OP(Sub)
+DC_X_OP(Mul)
+DC_X_OP(Div)
+DC_X_OP(Sin)
+DC_X_OP(Cos)
+DC_X_OP(Sqrt)
+DC_X_OP(Pop)
 
 void DC_X_AbandonCalculation(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld){
@@ -137,7 +122,7 @@ struct DC_X_Calculation *DC_X_FinalizeCalculation(struct DC_X_Context *ctx,
     struct DC_JIT_Page *const new_page = DC_JIT_AllocPage();
     bld->at += DC_ASM_WriteRet(DC_X_GET_BUILDER_AT(bld));
 
-#if 0
+#if 1
     { /* For debugging only. */
         FILE *const log = fopen("log.bin", "wb");
         fwrite(DC_X_GET_BUILDER_BYTES(bld), 1, bld->at, log);

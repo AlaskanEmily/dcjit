@@ -31,6 +31,15 @@ global _DC_ASM_WriteDiv
 global DC_ASM_pop_size
 global _DC_ASM_WritePop
 
+global DC_ASM_sin_size
+global _DC_ASM_WriteSin
+
+global DC_ASM_cos_size
+global _DC_ASM_WriteCos
+
+global DC_ASM_sqrt_size
+global _DC_ASM_WriteSqrt
+
 global DC_ASM_ret_size
 global _DC_ASM_WriteRet
 
@@ -157,6 +166,19 @@ _DC_ASM_WriteImmediate:
     mov eax, 14
     ret
 
+; unsigned DCJIT_CDECL DC_ASM_WriteSqrt(void *dest);
+; Since this does not change the stack pointer, it can't be folded with the
+; other arithmetic ops
+_DC_ASM_WriteSqrt:
+    mov ecx, 0xF30F5101
+    mov eax, [dc_asm_index]
+    xor cl, [dc_asm_arithmetic_codes + eax - 1]
+    bswap ecx
+    mov edx, [esp+4]
+    mov [edx], ecx
+    mov eax, 4
+    ret
+
 ; unsigned DCJIT_CDECL DC_ASM_WriteAdd(void *dest);
 _DC_ASM_WriteAdd:
     mov ecx, 0xF30F5800
@@ -198,6 +220,60 @@ _DC_ASM_WritePop:
     xor eax, eax
     ret
 
+; unsigned DCJIT_CDECL DC_ASM_WriteCos(void *dest);
+_DC_ASM_WriteCos:
+    push 0xFF
+    jmp dc_asm_trig_func
+
+; unsigned DCJIT_CDECL DC_ASM_WriteSin(void *dest);
+_DC_ASM_WriteSin:
+    push 0xFE
+    ; dc_asm_trig_func
+
+dc_asm_trig_func:
+    ; Check for SSE2, and use double-precision trig functions if the better
+    ; conversions functions are available.
+    push ebx
+    xor eax, eax
+    inc eax
+    cpuid
+    pop ebx
+    mov eax, [esp+8]
+    mov ecx, [dc_asm_index]
+    dec ecx
+    bt edx, 26
+    jnc dc_asm_x87_trig
+    jmp dc_asm_x87_trig
+dc_asm_sse2_trig:
+    ret
+    
+dc_asm_x87_trig:
+    ; It's slightly more efficient to move the value of esp into eax, since we
+    ; dereference the value so much.
+    ; Write:
+    ; lea eax, [esp-4]
+    ; movss [eax], XMM
+    ; fld (DWORD) [eax]
+    ; fsin
+    ; fstp (DWORD) [eax]
+    ; movss xmm0, [eax]
+    mov [eax], DWORD 0xFC24448D ; lea eax, [esp-4]
+    shl cl, 3
+    or ecx, 0xF30F1100
+    bswap ecx
+    mov [eax+4], ecx ; movss [eax], XMM
+    pop edx ; Get the sin/cos byte
+    shl edx, 24
+    or edx, 0x00D900D9
+    mov [eax+8], edx ; fld (DWORD) [eax], f(cos|sin)
+    mov [eax+12], WORD 0x18D9
+    bswap ecx
+    mov ch, 0x10
+    bswap ecx
+    mov [eax+14], ecx
+    mov eax, 18
+    ret
+
 ; unsigned DCJIT_CDECL DC_ASM_WriteRet(void *dest);
 _DC_ASM_WriteRet:
     dec DWORD [dc_asm_index]
@@ -223,11 +299,14 @@ section .data
     
     dc_asm_arithmetic_codes: db 0xC1,0xCA,0xD3,0xDC,0xE5,0xEE,0xF7
     
+    DC_ASM_cos_size: ; FALLTHROUGH
+    DC_ASM_sin_size: dd 24
     DC_ASM_jmp_size: dd 6
     DC_ASM_push_arg_size: dd 5
     DC_ASM_immediate_size: dd 14
     DC_ASM_sub_size: ; FALLTHROUGH
     DC_ASM_mul_size: ; FALLTHROUGH
     DC_ASM_div_size: ; FALLTHROUGH
+    DC_ASM_sqrt_size: ; FALLTHROUGH
     DC_ASM_add_size: dd 4
     DC_ASM_ret_size: dd 1

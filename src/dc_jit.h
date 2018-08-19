@@ -69,6 +69,15 @@ unsigned DCJIT_CDECL DC_ASM_WriteMul(void *dest);
 extern const unsigned DC_ASM_div_size;
 unsigned DCJIT_CDECL DC_ASM_WriteDiv(void *dest);
 
+extern const unsigned DC_ASM_sin_size;
+unsigned DCJIT_CDECL DC_ASM_WriteSin(void *dest);
+
+extern const unsigned DC_ASM_cos_size;
+unsigned DCJIT_CDECL DC_ASM_WriteCos(void *dest);
+
+extern const unsigned DC_ASM_sqrt_size;
+unsigned DCJIT_CDECL DC_ASM_WriteSqrt(void *dest);
+
 extern const unsigned DC_ASM_ret_size;
 unsigned DCJIT_CDECL DC_ASM_WriteRet(void *dest);
 

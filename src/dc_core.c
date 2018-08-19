@@ -14,9 +14,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #ifndef DC_OPTIMIZE
 #define DC_OPTIMIZE 1
+#endif
+
+#ifndef DC_OPTIMIZE_INTRINSIC
+#define DC_OPTIMIZE_INTRINSIC DC_OPTIMIZE
 #endif
 
 /* General parsing components. */
@@ -28,20 +33,23 @@ enum TermResultType {
     eTermInvalidArgName
 };
 
-typedef float(*arithmetic_operation)(float, float);
+typedef double(*arithmetic_operation)(double, double);
+typedef double(*unary_operation)(double);
 typedef enum TermResultType(*parser_callback)(struct DC_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    float *out_immediate);
+    double *out_immediate);
 
-static float arithmetic_operation_add(float a, float b) { return a + b; }
-static float arithmetic_operation_sub(float a, float b) { return a - b; }
-static float arithmetic_operation_mul(float a, float b) { return a * b; }
-static float arithmetic_operation_div(float a, float b) { return a / b; }
-
+static double arithmetic_operation_add(double a, double b) { return a + b; }
+static double arithmetic_operation_sub(double a, double b) { return a - b; }
+static double arithmetic_operation_mul(double a, double b) { return a * b; }
+static double arithmetic_operation_div(double a, double b) { return a / b; }
+static double arithmetic_operation_sin(double a){ return sin(a); }
+static double arithmetic_operation_cos(double a){ return cos(a); }
+static double arithmetic_operation_sqrt(double a){ return sqrt(a); }
 typedef void (*build_push_operation)(struct DC_X_Context*, struct DC_X_CalculationBuilder*);
 
 struct DC_Context{
@@ -107,8 +115,8 @@ parse_done:
     return val;
 }
 
-/* Parses a float. */
-static float parse_float(const char **const source_ptr){
+/* Parses a double. */
+static double parse_double(const char **const source_ptr){
     int negate = 0;
     const char *source = *source_ptr;
     switch(*source){
@@ -131,11 +139,11 @@ static float parse_float(const char **const source_ptr){
             {
                 const double fraction = ((double)fraction_int) / ((double)divider);
                 const double value = ((double)numerator) + fraction;
-                return (float)(negate ? (-value) : value);
+                return (double)(negate ? (-value) : value);
             }
         }
         else{
-            const float value = (float)numerator;
+            const double value = (double)numerator;
             source_ptr[0] = source;
             return negate ? (-value) : value;
         }
@@ -143,7 +151,7 @@ static float parse_float(const char **const source_ptr){
 }
 
 union TermType {
-    float immediate;
+    double immediate;
     unsigned short argument;
 };
 
@@ -164,7 +172,7 @@ static enum TermResultType parse_add_ops(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    float *out_immediate);
+    double *out_immediate);
 
 /* Parses a value. This can be a literal, or an argument name or number. */
 static enum TermResultType parse_value(const char **source_ptr,
@@ -217,7 +225,7 @@ static enum TermResultType parse_value(const char **source_ptr,
         case '7':
         case '8':
         case '9':
-            return DC_TERM_SUCCESS_IMM(parse_float(&source));
+            return DC_TERM_SUCCESS_IMM(parse_double(&source));
         default:
             /* Parse an arg name */
             {
@@ -257,15 +265,14 @@ static enum TermResultType parse_value(const char **source_ptr,
     }
 }
 
-static enum TermResultType parse_term(struct DC_Context *ctx,
+static enum TermResultType parse_parens(struct DC_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    float *out_immediate){
+    double *out_immediate){
     
-    union TermResult result;
     if(**source_ptr == '('){
         const char *source = skip_whitespace(source_ptr[0]+1);
         const enum TermResultType type = parse_add_ops(ctx,
@@ -279,9 +286,9 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
         if(type == eTermImmediate || type == eTermArgument){
             if(*source++ != ')'){
 #ifdef _MSC_VER
-                strncpy_s(error_text, 0xFF,  "Expected ) at the end of subexpression.", _TRUNCATE);
+                strncpy_s(error_text, 0xFF,  "Expected )", _TRUNCATE);
 #else
-                strncpy(error_text, "Expected ) at the end of subexpression.", 0xFF);
+                strncpy(error_text, "Expected )", 0xFF);
                 error_text[0xFF] = 0;
 #endif
                 return eTermSyntaxError;
@@ -289,9 +296,72 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
             
             source_ptr[0] = source;
         }
-        
         return type;
     }
+    else{
+#ifdef _MSC_VER
+        strncpy_s(error_text, 0xFF,  "Expected (", _TRUNCATE);
+#else
+        strncpy(error_text, "Expected (", 0xFF);
+        error_text[0xFF] = 0;
+#endif
+        return eTermSyntaxError;
+    }
+}
+
+static enum TermResultType builtin(struct DC_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    char error_text[0x100],
+    const char **source_ptr,
+    unsigned num_args,
+    const char *const *arg_names,
+    double *out_immediate,
+    unary_operation immediate_operation,
+    build_push_operation operation){
+    double immediate;
+    const enum TermResultType type = parse_parens(ctx,
+        bld, error_text, source_ptr, num_args, arg_names, &immediate);
+    if(type == eTermImmediate){
+        if(DC_OPTIMIZE_INTRINSIC){
+            out_immediate[0] = immediate_operation(immediate);
+        }
+        else{
+            DC_X_BuildPushImmediate(ctx->ctx, bld, (float)immediate);
+            operation(ctx->ctx, bld);
+            return eTermArgument;
+        }
+    }
+    else if(type == eTermArgument){
+        operation(ctx->ctx, bld);
+    }
+    return type;
+}   
+
+static enum TermResultType parse_term(struct DC_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    char error_text[0x100],
+    const char **source_ptr,
+    unsigned num_args,
+    const char *const *arg_names,
+    double *out_immediate){
+    
+    union TermResult result;
+    if(**source_ptr == '('){
+        return parse_parens(ctx,
+            bld, error_text, source_ptr, num_args, arg_names, out_immediate);
+    }
+
+#define DC_BUILTIN(NAME, IMMEDIATE, PUSH) do{\
+        if(strncmp(*source_ptr, ( NAME "(" ), sizeof(NAME))==0){\
+            source_ptr[0] += sizeof(NAME) - 1;\
+            return builtin(ctx, bld, error_text, source_ptr, num_args,\
+                arg_names, out_immediate, (IMMEDIATE), (PUSH));\
+        }\
+    }while(0)
+
+    DC_BUILTIN("sin", arithmetic_operation_sin, DC_X_BuildSin);
+    DC_BUILTIN("cos", arithmetic_operation_cos, DC_X_BuildCos);
+    DC_BUILTIN("sqrt", arithmetic_operation_sqrt, DC_X_BuildSqrt);
     
     switch(parse_value(source_ptr, num_args, arg_names, &result)){
         case eTermInvalidArgNumber:
@@ -333,7 +403,7 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    float *out_immediate,
+    double *out_immediate,
     parser_callback parse_callback,
     const char first_char,
     const char second_char,
@@ -343,7 +413,7 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
     build_push_operation second_build){
     
     int is_immediate = 0;
-    float immediate;
+    double immediate;
     const char *source;
     const enum TermResultType type = parse_callback(
         ctx, bld, error_text, source_ptr, num_args, arg_names, &immediate);
@@ -353,7 +423,7 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
             /* This will prevent the initial is_immediate set, which stops all
              * future constant folding in this expression. */
             if(!DC_OPTIMIZE)
-                DC_X_BuildPushImmediate(ctx->ctx, bld, immediate);
+                DC_X_BuildPushImmediate(ctx->ctx, bld, (float)immediate);
             else
                 is_immediate = 1;
             /* FALLTHROUGH */
@@ -362,7 +432,7 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
             while(*source != '\0'){
                 source = skip_whitespace(source);
                 if(*source == first_char || *source == second_char){
-                    float next_immediate;
+                    double next_immediate;
                     const int is_first = (*source == first_char);
                     source = skip_whitespace(++source);
                     switch(parse_callback(ctx,
@@ -386,7 +456,8 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
                                 break;
                             }
                             /* TODO: We could parse the next term and then flush */
-                            DC_X_BuildPushImmediate(ctx->ctx, bld, next_immediate);
+                            DC_X_BuildPushImmediate(ctx->ctx,
+                                bld, (float)next_immediate);
                             /* FALLTHROUGH */
                         case eTermArgument:
                             is_immediate = 0;
@@ -425,7 +496,7 @@ static enum TermResultType parse_mul_ops(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    float *out_immediate){
+    double *out_immediate){
     
     return parse_generic(ctx,
         bld,
@@ -449,7 +520,7 @@ static enum TermResultType parse_add_ops(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    float *out_immediate){
+    double *out_immediate){
     
     return parse_generic(ctx,
         bld,
@@ -476,7 +547,7 @@ struct DC_Calculation *DC_Compile(struct DC_Context *ctx,
     struct DC_X_CalculationBuilder *const bld =
         DC_X_CreateCalculationBuilder(ctx->ctx);
     
-    float immediate;
+    double immediate;
     calc->calc = NULL;
     source = skip_whitespace(source);
     
@@ -488,7 +559,7 @@ struct DC_Calculation *DC_Compile(struct DC_Context *ctx,
         arg_names,
         &immediate)){
             case eTermImmediate:
-                DC_X_BuildPushImmediate(ctx->ctx, bld, immediate);
+                DC_X_BuildPushImmediate(ctx->ctx, bld, (float)immediate);
             case eTermArgument: /* FALLTHROUGH */
                 calc->error[0] = 0;
                 calc->calc = DC_X_FinalizeCalculation(ctx->ctx, bld);
