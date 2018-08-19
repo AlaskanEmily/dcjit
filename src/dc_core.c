@@ -17,11 +17,23 @@
 #include <math.h>
 
 #ifndef DC_OPTIMIZE
-#define DC_OPTIMIZE 1
+#define DC_OPTIMIZE 0
 #endif
 
 #ifndef DC_OPTIMIZE_INTRINSIC
 #define DC_OPTIMIZE_INTRINSIC DC_OPTIMIZE
+#endif
+
+
+#ifdef _MSC_VER
+    #define DC_STRNCPY(DEST, LEN, TXT) strncpy_s((DEST), (LEN),  (TXT), _TRUNCATE)
+#else
+    #define DC_STRNCPY(DEST, LEN, TXT) do {\
+        char *const DC_STRNCPY_dst = (DST);\
+        const long DC_STRNCPY_len = (LEN);\
+        strncpy(DC_STRNCPY_dst, (TXT), DC_STRNCPY_len);\
+        DC_STRNCPY_dst[DC_STRNCPY_len-1] = '\0';\
+    }while(0)
 #endif
 
 /* General parsing components. */
@@ -285,12 +297,7 @@ static enum TermResultType parse_parens(struct DC_Context *ctx,
         source = skip_whitespace(source);
         if(type == eTermImmediate || type == eTermArgument){
             if(*source++ != ')'){
-#ifdef _MSC_VER
-                strncpy_s(error_text, 0xFF,  "Expected )", _TRUNCATE);
-#else
-                strncpy(error_text, "Expected )", 0xFF);
-                error_text[0xFF] = 0;
-#endif
+                DC_STRNCPY(error_text, 0xFF, "Expected )");
                 return eTermSyntaxError;
             }
             
@@ -299,16 +306,13 @@ static enum TermResultType parse_parens(struct DC_Context *ctx,
         return type;
     }
     else{
-#ifdef _MSC_VER
-        strncpy_s(error_text, 0xFF,  "Expected (", _TRUNCATE);
-#else
-        strncpy(error_text, "Expected (", 0xFF);
-        error_text[0xFF] = 0;
-#endif
+        DC_STRNCPY(error_text, 0xFF, "Expected (");
         return eTermSyntaxError;
     }
 }
 
+/* Parses a builtin, which is a parenthesized expression and a unary operation
+ * to perform on that operation or to push to the JIT. */
 static enum TermResultType builtin(struct DC_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
@@ -318,10 +322,17 @@ static enum TermResultType builtin(struct DC_Context *ctx,
     double *out_immediate,
     unary_operation immediate_operation,
     build_push_operation operation){
+    
     double immediate;
+    
+    /* Builtins are: <atom> '(' <expression> ')'
+     * The atom should already have been consumed, so we can begin by parsing
+     * the parenthesized expression.
+     */
     const enum TermResultType type = parse_parens(ctx,
         bld, error_text, source_ptr, num_args, arg_names, &immediate);
     if(type == eTermImmediate){
+        /* If intrinsics can be optimized, then we can apply the operation */
         if(DC_OPTIMIZE_INTRINSIC){
             out_immediate[0] = immediate_operation(immediate);
         }
@@ -337,6 +348,8 @@ static enum TermResultType builtin(struct DC_Context *ctx,
     return type;
 }   
 
+/* Parses a term, which can be a value, a parenthesized expression, or a
+ * builtin operation */
 static enum TermResultType parse_term(struct DC_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
@@ -346,11 +359,16 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
     double *out_immediate){
     
     union TermResult result;
+    
+    /* Check for a parentheszied expression. */
     if(**source_ptr == '('){
         return parse_parens(ctx,
             bld, error_text, source_ptr, num_args, arg_names, out_immediate);
     }
 
+    /* Builtins are <atom> '(' <expression> ')'
+     * Search for the <atom> '(', since then we can re-use the parenthesized
+     * expression parsing logic for the argument. */
 #define DC_BUILTIN(NAME, IMMEDIATE, PUSH) do{\
         if(strncmp(*source_ptr, ( NAME "(" ), sizeof(NAME))==0){\
             source_ptr[0] += sizeof(NAME) - 1;\
@@ -363,7 +381,9 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
     DC_BUILTIN("cos", arithmetic_operation_cos, DC_X_BuildCos);
     DC_BUILTIN("sqrt", arithmetic_operation_sqrt, DC_X_BuildSqrt);
     
+    /* If it wasn't a builtin or a parenthesized expression, it is a value. */
     switch(parse_value(source_ptr, num_args, arg_names, &result)){
+        /* Convert any errors to error text. */
         case eTermInvalidArgNumber:
             snprintf(error_text,
                 0x100,
@@ -386,9 +406,18 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
             error_text[sizeof(error_msg) + arg_name_size - 1] = 0;
         }
             return eTermInvalidArgName;
+        /* Propogate immediates if optimization is enabled. */
         case eTermImmediate:
-            out_immediate[0] = result.term.immediate;
-            return eTermImmediate;
+            if(DC_OPTIMIZE){
+                out_immediate[0] = result.term.immediate;
+                return eTermImmediate;
+            }
+            else{
+                /* This is a little white lie, the result /was/ an immediate,
+                 * but we want it to be treated as an argument. */
+                DC_X_BuildPushImmediate(ctx->ctx, bld, result.term.argument);
+                return eTermArgument;
+            }
         case eTermArgument:
             DC_X_BuildPushArg(ctx->ctx, bld, result.term.argument);
             return eTermArgument;
@@ -420,12 +449,11 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
     
     switch(type){
         case eTermImmediate:
-            /* This will prevent the initial is_immediate set, which stops all
-             * future constant folding in this expression. */
-            if(!DC_OPTIMIZE)
-                DC_X_BuildPushImmediate(ctx->ctx, bld, (float)immediate);
-            else
-                is_immediate = 1;
+            /* We don't need to worry about de-optimizing immediate value
+             * propogation, since no immediates will be generated from the
+             * lower-level parse_term function when optimizations are
+             * disabled. */
+            is_immediate = 1;
             /* FALLTHROUGH */
         case eTermArgument:
             source = skip_whitespace(*source_ptr);
@@ -490,6 +518,7 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
     return 0;
 }
 
+/* Implements parsing terms separated by `/' and `*' */
 static enum TermResultType parse_mul_ops(struct DC_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
@@ -514,6 +543,8 @@ static enum TermResultType parse_mul_ops(struct DC_Context *ctx,
         DC_X_BuildDiv);
 }
 
+/* Implements parsing terms separated by `+' and `-', calling into
+ * parse_mul_ops for each term. */
 static enum TermResultType parse_add_ops(struct DC_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
