@@ -1,0 +1,58 @@
+# Any copyright is dedicated to the Public Domain.
+# http://creativecommons.org/publicdomain/zero/1.0/
+
+all: dc.exe
+
+CLFLAGS=/nologo /W3 /EHsc /Zi /MT
+CL=cl
+LINK=link
+LINKFLAGS=/NOLOGO /DEBUG 
+
+dc_main.obj: dc_main.c dc.h
+	$(CL) $(CLFLAGS) /c dc_main.c
+
+dc_core.obj: dc_core.c dc.h dc_backend.h
+	$(CL) $(CLFLAGS) /c dc_core.c
+
+# Soft components
+dc_soft.obj: dc_soft.cpp dc_backend.h
+	$(CL) $(CLFLAGS) /c dc_soft.cpp
+
+libdcjit_soft.a: dc_soft.o
+	ar rc libdcjit_soft.a dc_soft.o
+	ranlib libdcjit_soft.a
+
+# JIT platform components
+dc_jit_win32.obj: dc_jit_win32.c dc_jit.h
+	$(CL) $(CLFLAGS) /c dc_jit_win32.c
+
+# JIT arch components
+dc_jit_x86.obj: dc_jit_x86.s
+	yasm -f win32 -Worphan-labels dc_jit_x86.s
+
+dc_jit_amd64.obj: dc_jit_amd64.s
+	yasm -f win64 -Worphan-labels dc_jit_amd64.s
+
+# General JIT components
+dc_jit.obj: dc_jit.c dc_jit.h dc_backend.h
+	$(CL) $(CLFLAGS) /c dc_jit.c
+
+dcjit_x86_win32.lib: dc_jit.obj dc_jit_x86.obj dc_jit_win32.obj
+	lib /nologo /OUT:dcjit_x86_win32.lib dc_jit.obj dc_jit_x86.obj dc_jit_win32.obj
+
+dcjit_amd64_win32.lib: dc_jit.obj dc_jit_amd64.obj dc_jit_win32.obj
+	lib /nologo /OUT:dcjit_amd64_win32.lib dc_jit.obj dc_jit_amd64.obj dc_jit_win32.obj
+
+OBJECTS=dc_main.obj dc_core.obj
+
+dc.exe: $(OBJECTS) dcjit_$(DCJITARCH)_win32.lib
+	$(LINK) $(LINKFLAGS) $(OBJECTS) dcjit_$(DCJITARCH)_win32.lib /OUT:dc.exe
+
+clean:
+	@del /Q *.obj 2> nul || echo ""> nul
+	@del /Q *.pdb 2> nul || echo ""> nul
+	@del /Q *.ilk 2> nul || echo ""> nul
+	@del /Q *.exp 2> nul || echo ""> nul
+	@del /Q *.lib 2> nul || echo ""> nul
+	@del /Q dc.exe 2> nul || echo ""> nul
+	@del /Q *.dll 2> nul || echo ""> nul
