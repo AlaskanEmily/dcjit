@@ -21,7 +21,6 @@ unsigned DC_JIT_PageSize(){
     static unsigned size = 0;
     if(size == 0)
         size = page_size(); 
-    
     return size;
 }
 
@@ -34,7 +33,6 @@ struct DC_JIT_Page *DC_JIT_AllocPage(){
 void *DC_JIT_GetPageData(struct DC_JIT_Page *p){
     return p;
 }
-
 
 /* Marks a page as read/execute only. */
 void DC_JIT_MarkPageExecutable(struct DC_JIT_Page *p){
