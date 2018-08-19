@@ -65,18 +65,17 @@ _DC_ASM_WritePushArg:
     mov [eax+2], BYTE 0x10
     
 ; Get the current stack depth
-    mov ecx, [dc_asm_index]
-    inc ecx
-    mov [dc_asm_index], ecx
-    dec ecx
+    mov edx, dc_asm_index
+    mov ecx, [edx]
+    inc DWORD [edx]
 
 ; TODO: Check if we have overflowed into the CPU stack.
 
 ; Translate the stack depth into the XMM register encoding
-    shl ecx, 3
+    rol cx, 3
 
 ; Add 2 to ecx. This forms the opcode movss, xmm, [edx+IMM] or movss xmm, [edx]
-    or ecx, 2
+    or cl, 2
 
 ; Get the arg number
     xor edx, edx
@@ -132,13 +131,13 @@ dc_asm_immediate_one:
 ; unsigned DC_ASM_WriteImmediate(void *dest, float value);
 _DC_ASM_WriteImmediate:
     mov eax, [esp+4] ; Get the dest
-    mov edx, [esp+8] ; Get the immediate.
     
     ; Get the current stack depth
-    mov ecx, [dc_asm_index]
-    inc ecx
-    mov [dc_asm_index], ecx
-    dec ecx
+    mov edx, dc_asm_index
+    mov ecx, [edx]
+    inc DWORD [edx]
+    
+    mov edx, [esp+8] ; Get the immediate.
     
     cmp edx, 0
     je dc_asm_immediate_zero

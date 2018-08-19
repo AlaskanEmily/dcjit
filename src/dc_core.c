@@ -17,7 +17,7 @@
 #include <math.h>
 
 #ifndef DC_OPTIMIZE
-#define DC_OPTIMIZE 1
+#define DC_OPTIMIZE 0
 #endif
 
 #ifndef DC_OPTIMIZE_INTRINSIC
@@ -40,9 +40,15 @@
 enum TermResultType {
     eTermImmediate,
     eTermArgument,
+    eTermPushed,
     eTermSyntaxError,
     eTermInvalidArgNumber,
     eTermInvalidArgName
+};
+
+union TermType {
+    double immediate;
+    unsigned short argument;
 };
 
 typedef double(*arithmetic_operation)(double, double);
@@ -53,7 +59,7 @@ typedef enum TermResultType(*parser_callback)(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    double *out_immediate);
+    union TermType *out_term);
 
 static double arithmetic_operation_add(double a, double b) { return a + b; }
 static double arithmetic_operation_sub(double a, double b) { return a - b; }
@@ -162,11 +168,6 @@ static double parse_double(const char **const source_ptr){
     }
 }
 
-union TermType {
-    double immediate;
-    unsigned short argument;
-};
-
 /* Data for terms. */
 union TermResult {
     union TermType term;
@@ -184,7 +185,7 @@ static enum TermResultType parse_add_ops(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    double *out_immediate);
+    union TermType *out_term);
 
 /* Parses a value. This can be a literal, or an argument name or number. */
 static enum TermResultType parse_value(const char **source_ptr,
@@ -284,7 +285,7 @@ static enum TermResultType parse_parens(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    double *out_immediate){
+    union TermType *out_term){
     
     if(**source_ptr == '('){
         const char *source = skip_whitespace(source_ptr[0]+1);
@@ -294,14 +295,13 @@ static enum TermResultType parse_parens(struct DC_Context *ctx,
             &source,
             num_args,
             arg_names,
-            out_immediate);
+            out_term);
         source = skip_whitespace(source);
-        if(type == eTermImmediate || type == eTermArgument){
+        if(type == eTermImmediate || type == eTermArgument || type == eTermPushed){
             if(*source++ != ')'){
                 DC_STRNCPY(error_text, 0xFF, "Expected )");
                 return eTermSyntaxError;
             }
-            
             source_ptr[0] = source;
         }
         return type;
@@ -320,30 +320,33 @@ static enum TermResultType builtin(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    double *out_immediate,
+    union TermType *out_term,
     unary_operation immediate_operation,
     build_push_operation operation){
-    
-    double immediate;
     
     /* Builtins are: <atom> '(' <expression> ')'
      * The atom should already have been consumed, so we can begin by parsing
      * the parenthesized expression.
      */
     const enum TermResultType type = parse_parens(ctx,
-        bld, error_text, source_ptr, num_args, arg_names, &immediate);
+        bld, error_text, source_ptr, num_args, arg_names, out_term);
     if(type == eTermImmediate){
         /* If intrinsics can be optimized, then we can apply the operation */
         if(DC_OPTIMIZE_INTRINSIC){
-            out_immediate[0] = immediate_operation(immediate);
+            out_term->immediate = immediate_operation(out_term->immediate);
         }
         else{
-            DC_X_BuildPushImmediate(ctx->ctx, bld, (float)immediate);
+            DC_X_BuildPushImmediate(ctx->ctx, bld, (float)out_term->immediate);
             operation(ctx->ctx, bld);
-            return eTermArgument;
+            return eTermPushed;
         }
     }
     else if(type == eTermArgument){
+        DC_X_BuildPushArg(ctx->ctx, bld, out_term->argument);
+        operation(ctx->ctx, bld);
+        return eTermPushed;
+    }
+    else if(type == eTermPushed){
         operation(ctx->ctx, bld);
     }
     return type;
@@ -357,14 +360,14 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    double *out_immediate){
+    union TermType *out_term){
     
     union TermResult result;
-    
+    enum TermResultType type;
     /* Check for a parentheszied expression. */
     if(**source_ptr == '('){
         return parse_parens(ctx,
-            bld, error_text, source_ptr, num_args, arg_names, out_immediate);
+            bld, error_text, source_ptr, num_args, arg_names, out_term);
     }
 
     /* Builtins are <atom> '(' <expression> ')'
@@ -374,7 +377,7 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
         if(strncmp(*source_ptr, ( NAME "(" ), sizeof(NAME))==0){\
             source_ptr[0] += sizeof(NAME) - 1;\
             return builtin(ctx, bld, error_text, source_ptr, num_args,\
-                arg_names, out_immediate, (IMMEDIATE), (PUSH));\
+                arg_names, out_term, (IMMEDIATE), (PUSH));\
         }\
     }while(0)
 
@@ -383,7 +386,8 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
     DC_BUILTIN("sqrt", arithmetic_operation_sqrt, DC_X_BuildSqrt);
     
     /* If it wasn't a builtin or a parenthesized expression, it is a value. */
-    switch(parse_value(source_ptr, num_args, arg_names, &result)){
+    type = parse_value(source_ptr, num_args, arg_names, &result);
+    switch(type){
         /* Convert any errors to error text. */
         case eTermInvalidArgNumber:
             snprintf(error_text,
@@ -391,7 +395,7 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
                 "Arg %li is over the maximum of %u",
                 result.int_error,
                 num_args);
-            return eTermInvalidArgNumber;
+            break;
         case eTermInvalidArgName:
         {
             const char error_msg[] = "Invalid argument name ";
@@ -406,25 +410,29 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
             /* NULL-terminate */
             error_text[sizeof(error_msg) + arg_name_size - 1] = 0;
         }
-            return eTermInvalidArgName;
-        /* Propogate immediates if optimization is enabled. */
+            break;
         case eTermImmediate:
             if(DC_OPTIMIZE){
-                out_immediate[0] = result.term.immediate;
-                return eTermImmediate;
+                out_term->immediate = result.term.immediate;
             }
             else{
-                /* This is a little white lie, the result /was/ an immediate,
-                 * but we want it to be treated as an argument. */
                 DC_X_BuildPushImmediate(ctx->ctx, bld, (float)result.term.immediate);
-                return eTermArgument;
+                type = eTermPushed;
             }
+            break;
         case eTermArgument:
-            DC_X_BuildPushArg(ctx->ctx, bld, result.term.argument);
-            return eTermArgument;
+            if(DC_OPTIMIZE){
+                out_term->argument = result.term.argument;
+            }
+            else{
+                DC_X_BuildPushArg(ctx->ctx, bld, result.term.argument);
+                type = eTermPushed;
+            }
+            break;
+        case eTermPushed:
+            break;
     }
-    fputs("INTERNAL ERROR", stderr);
-    abort();
+    return type;
 }
 
 static enum TermResultType parse_generic(struct DC_Context *ctx,
@@ -433,7 +441,7 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    double *out_immediate,
+    union TermType *out_term,
     parser_callback parse_callback,
     const char first_char,
     const char second_char,
@@ -442,61 +450,86 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
     build_push_operation first_build,
     build_push_operation second_build){
     
-    int is_immediate = 0;
-    double immediate;
+    union TermType term;
     const char *source;
-    const enum TermResultType type = parse_callback(
-        ctx, bld, error_text, source_ptr, num_args, arg_names, &immediate);
+    enum TermResultType type = parse_callback(
+        ctx, bld, error_text, source_ptr, num_args, arg_names, &term);
     
     switch(type){
+        case eTermPushed:
+            /* FALLTHROUGH */
         case eTermImmediate:
-            /* We don't need to worry about de-optimizing immediate value
-             * propogation, since no immediates will be generated from the
-             * lower-level parse_term function when optimizations are
-             * disabled. */
-            is_immediate = 1;
             /* FALLTHROUGH */
         case eTermArgument:
             source = skip_whitespace(*source_ptr);
             while(*source != '\0'){
                 source = skip_whitespace(source);
                 if(*source == first_char || *source == second_char){
-                    double next_immediate;
                     const int is_first = (*source == first_char);
+                    
+                    union TermType next_term;
+                    enum TermResultType next_type;
+                    
+                    /* Skip past the operator. */
                     source = skip_whitespace(++source);
-                    switch(parse_callback(ctx,
-                        bld,
-                        error_text,
-                        &source,
-                        num_args,
-                        arg_names,
-                        &next_immediate)){
-                        case eTermInvalidArgNumber:
-                            return eTermInvalidArgNumber;
-                        case eTermInvalidArgName:
-                            return eTermInvalidArgName;
-                        case eTermSyntaxError:
-                            return eTermSyntaxError;
+                    
+                    next_type = parse_callback(ctx, bld, error_text, &source,
+                        num_args, arg_names, &next_term);
+                    
+                    switch(next_type){
                         case eTermImmediate:
-                            if(is_immediate){
-                                immediate = (is_first) ?
-                                    first_op(immediate, next_immediate) :
-                                    second_op(immediate, next_immediate);
-                                break;
+                            if(type == eTermImmediate){
+                                term.immediate = (is_first) ?
+                                    first_op(term.immediate,
+                                        next_term.immediate) :
+                                    second_op(term.immediate,
+                                        next_term.immediate);
+                                continue;
                             }
+                            
+                            /* Flush the first argument */
+                            if(type == eTermArgument){
+                                DC_X_BuildPushArg(ctx->ctx,
+                                    bld, term.argument);
+                                type = eTermPushed;
+                            }
+                            
                             /* TODO: We could parse the next term and then flush */
                             DC_X_BuildPushImmediate(ctx->ctx,
-                                bld, (float)next_immediate);
-                            /* FALLTHROUGH */
-                        case eTermArgument:
-                            is_immediate = 0;
+                                bld, (float)next_term.immediate);
                             if(is_first)
                                 first_build(ctx->ctx, bld);
                             else
                                 second_build(ctx->ctx, bld);
-                        break;
+                            continue;
+                        case eTermArgument:
+                            
+                            /* Flush the first argument */
+                            if(type == eTermImmediate){
+                                DC_X_BuildPushImmediate(ctx->ctx,
+                                    bld, (float)term.immediate);
+                                type = eTermPushed;
+                            }
+                            else if(type == eTermArgument){
+                                DC_X_BuildPushArg(ctx->ctx,
+                                    bld, term.argument);
+                                type = eTermPushed;
+                            }
+                            DC_X_BuildPushArg(ctx->ctx,
+                                bld, next_term.argument);
+                                
+                            /* FALLTHROUGH */
+                        case eTermPushed:
+                            if(is_first)
+                                first_build(ctx->ctx, bld);
+                            else
+                                second_build(ctx->ctx, bld);
+                            continue;
+                            
+                        /* Handle all errors */
+                        default:
+                            return next_type;
                     }
-                    continue;
                 }
                 else{
                     break;
@@ -504,13 +537,13 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
             }
             
             source_ptr[0] = source;
-            if(is_immediate){
-                out_immediate[0] = immediate;
-                return eTermImmediate;
+            if(type == eTermImmediate){
+                out_term->immediate = term.immediate;
             }
-            else{
-                return eTermArgument;
+            else if(type == eTermArgument){
+                out_term->immediate = term.argument;
             }
+            return type;
         default:
             return type;
     }
@@ -526,7 +559,7 @@ static enum TermResultType parse_mul_ops(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    double *out_immediate){
+    union TermType *out_term){
     
     return parse_generic(ctx,
         bld,
@@ -534,7 +567,7 @@ static enum TermResultType parse_mul_ops(struct DC_Context *ctx,
         source_ptr,
         num_args,
         arg_names,
-        out_immediate,
+        out_term,
         parse_term,
         '*',
         '/',
@@ -552,7 +585,7 @@ static enum TermResultType parse_add_ops(struct DC_Context *ctx,
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
-    double *out_immediate){
+    union TermType *out_term){
     
     return parse_generic(ctx,
         bld,
@@ -560,7 +593,7 @@ static enum TermResultType parse_add_ops(struct DC_Context *ctx,
         source_ptr,
         num_args,
         arg_names,
-        out_immediate,
+        out_term,
         parse_mul_ops,
         '+',
         '-',
@@ -579,7 +612,7 @@ struct DC_Calculation *DC_Compile(struct DC_Context *ctx,
     struct DC_X_CalculationBuilder *const bld =
         DC_X_CreateCalculationBuilder(ctx->ctx);
     
-    double immediate;
+    union TermType term;
     calc->calc = NULL;
     source = skip_whitespace(source);
     
@@ -589,15 +622,20 @@ struct DC_Calculation *DC_Compile(struct DC_Context *ctx,
         &source,
         num_args,
         arg_names,
-        &immediate)){
+        &term)){
             case eTermImmediate:
-                DC_X_BuildPushImmediate(ctx->ctx, bld, (float)immediate);
-            case eTermArgument: /* FALLTHROUGH */
+                DC_X_BuildPushImmediate(ctx->ctx, bld, (float)term.immediate);
                 calc->error[0] = 0;
                 calc->calc = DC_X_FinalizeCalculation(ctx->ctx, bld);
-            case eTermInvalidArgNumber: /* FALLTHROUGH */
-            case eTermInvalidArgName:
-            case eTermSyntaxError:
+                return calc;
+            case eTermArgument:
+                DC_X_BuildPushArg(ctx->ctx, bld, term.argument);
+                /* FALLTHROUGH */
+            case eTermPushed:
+                calc->error[0] = 0;
+                calc->calc = DC_X_FinalizeCalculation(ctx->ctx, bld);
+                /* FALLTHROUGH */
+            default:
                 return calc;
     }
     fputs("INTERNAL ERROR ", stderr);
