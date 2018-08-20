@@ -62,6 +62,50 @@ void DC_X_BuildSqrt(struct DC_X_Context *ctx,
 void DC_X_AbandonCalculation(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld);
 
+void DC_X_BuildAddArg(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    unsigned short arg);
+
+void DC_X_BuildSubArg(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    unsigned short arg);
+
+void DC_X_BuildMulArg(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    unsigned short arg);
+
+void DC_X_BuildDivArg(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    unsigned short arg);
+
+void DC_X_BuildSinArg(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    unsigned short arg);
+
+void DC_X_BuildCosArg(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    unsigned short arg);
+
+void DC_X_BuildSqrtArg(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    unsigned short arg);
+
+void DC_X_BuildAddImm(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    float imm);
+
+void DC_X_BuildSubImm(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    float imm);
+
+void DC_X_BuildMulImm(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    float imm);
+
+void DC_X_BuildDivImm(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    float imm);
+
 struct DC_X_Calculation *DC_X_FinalizeCalculation(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld);
 

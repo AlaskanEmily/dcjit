@@ -30,7 +30,6 @@ void *DC_JIT_GetPageData(struct DC_JIT_Page *p){
 
 /* Marks a page as read/execute only. */
 void DC_JIT_MarkPageExecutable(struct DC_JIT_Page *p){
-    MEMORY_BASIC_INFORMATION mem_info;
     DWORD unused, page_size = DC_JIT_PageSize();
     if(VirtualProtect(p, page_size, PAGE_EXECUTE_READ, &unused) != 0){
         const DWORD err = GetLastError();

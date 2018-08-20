@@ -37,11 +37,21 @@ dc_jit_amd64.obj: dc_jit_amd64.s
 dc_jit.obj: dc_jit.c dc_jit.h dc_backend.h
 	$(CL) $(CLFLAGS) /c dc_jit.c
 
-dcjit_x86_win32.lib: dc_jit.obj dc_jit_x86.obj dc_jit_win32.obj
-	lib /nologo /OUT:dcjit_x86_win32.lib dc_jit.obj dc_jit_x86.obj dc_jit_win32.obj
+dc_jit_simple.obj: dc_jit_simple.c dc_jit.h
+	$(CL) $(CLFLAGS) /c dc_jit_simple.c
 
-dcjit_amd64_win32.lib: dc_jit.obj dc_jit_amd64.obj dc_jit_win32.obj
-	lib /nologo /OUT:dcjit_amd64_win32.lib dc_jit.obj dc_jit_amd64.obj dc_jit_win32.obj
+DCJIT_X86_WIN32_OBJECTS=dc_jit.obj dc_jit_x86.obj dc_jit_win32.obj
+dcjit_x86_win32.lib: $(DCJIT_X86_WIN32_OBJECTS)
+	lib /nologo /OUT:dcjit_x86_win32.lib $(DCJIT_X86_WIN32_OBJECTS)
+
+DCJIT_AMD64_WIN32_OBJECTS=dc_jit.obj dc_jit_amd64.obj dc_jit_win32.obj dc_jit_simple.obj
+dcjit_amd64_win32.lib: $(DCJIT_AMD64_WIN32_OBJECTS)
+	lib /nologo /OUT:dcjit_amd64_win32.lib $(DCJIT_AMD64_WIN32_OBJECTS)
+
+DCJIT_SOFT_OBJECTS=dc_soft.obj
+dcjit_soft.lib: $(DCJIT_SOFT_OBJECTS)
+	lib /nologo /OUT:dcjit_soft.lib $(DCJIT_SOFT_OBJECTS)
+
 
 OBJECTS=dc_main.obj dc_core.obj
 

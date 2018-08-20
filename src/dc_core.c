@@ -17,7 +17,11 @@
 #include <math.h>
 
 #ifndef DC_OPTIMIZE
-#define DC_OPTIMIZE 0
+#define DC_OPTIMIZE 1
+#endif
+
+#ifndef DC_OPTIMIZE_FETCH
+#define DC_OPTIMIZE_FETCH DC_OPTIMIZE
 #endif
 
 #ifndef DC_OPTIMIZE_INTRINSIC
@@ -52,14 +56,14 @@ union TermType {
 };
 
 typedef double(*arithmetic_operation)(double, double);
-typedef double(*unary_operation)(double);
-typedef enum TermResultType(*parser_callback)(struct DC_Context *ctx,
-    struct DC_X_CalculationBuilder *bld,
-    char error_text[0x100],
-    const char **source_ptr,
-    unsigned num_args,
-    const char *const *arg_names,
-    union TermType *out_term);
+typedef void (*build_push_operation)(struct DC_X_Context*,
+    struct DC_X_CalculationBuilder*);
+typedef void (*build_push_arg_operation)(struct DC_X_Context*,
+    struct DC_X_CalculationBuilder*,
+    unsigned short);
+typedef void (*build_push_imm_operation)(struct DC_X_Context*,
+    struct DC_X_CalculationBuilder*,
+    float);
 
 static double arithmetic_operation_add(double a, double b) { return a + b; }
 static double arithmetic_operation_sub(double a, double b) { return a - b; }
@@ -68,7 +72,35 @@ static double arithmetic_operation_div(double a, double b) { return a / b; }
 static double arithmetic_operation_sin(double a){ return sin(a); }
 static double arithmetic_operation_cos(double a){ return cos(a); }
 static double arithmetic_operation_sqrt(double a){ return sqrt(a); }
-typedef void (*build_push_operation)(struct DC_X_Context*, struct DC_X_CalculationBuilder*);
+
+struct ParseOperation {
+    char operator_char;
+    arithmetic_operation immediate_op;
+    build_push_operation build_op;
+    build_push_arg_operation build_arg_op;
+    build_push_imm_operation build_imm_op;
+};
+
+#define DC_NUM_MUL_OPS 2
+static const struct ParseOperation dc_mul_ops[DC_NUM_MUL_OPS] = {
+    {'*', arithmetic_operation_mul, DC_X_BuildMul, DC_X_BuildMulArg, DC_X_BuildMulImm},
+    {'/', arithmetic_operation_div, DC_X_BuildDiv, DC_X_BuildDivArg, DC_X_BuildDivImm}
+};
+
+#define DC_NUM_ADD_OPS 2
+static const struct ParseOperation dc_add_ops[DC_NUM_ADD_OPS] = {
+    {'+', arithmetic_operation_add, DC_X_BuildAdd, DC_X_BuildAddArg, DC_X_BuildAddImm},
+    {'-', arithmetic_operation_sub, DC_X_BuildSub, DC_X_BuildSubArg, DC_X_BuildSubImm}
+};
+
+typedef double(*unary_operation)(double);
+typedef enum TermResultType(*parser_callback)(struct DC_Context *ctx,
+    struct DC_X_CalculationBuilder *bld,
+    char error_text[0x100],
+    const char **source_ptr,
+    unsigned num_args,
+    const char *const *arg_names,
+    union TermType *out_term);
 
 struct DC_Context{
     struct DC_X_Context *ctx;
@@ -443,12 +475,8 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
     const char *const *arg_names,
     union TermType *out_term,
     parser_callback parse_callback,
-    const char first_char,
-    const char second_char,
-    arithmetic_operation first_op,
-    arithmetic_operation second_op,
-    build_push_operation first_build,
-    build_push_operation second_build){
+    const struct ParseOperation *operations,
+    unsigned num_operations){
     
     union TermType term;
     const char *source;
@@ -463,47 +491,51 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
         case eTermArgument:
             source = skip_whitespace(*source_ptr);
             while(*source != '\0'){
+                unsigned i;
                 source = skip_whitespace(source);
-                if(*source == first_char || *source == second_char){
-                    const int is_first = (*source == first_char);
-                    
-                    union TermType next_term;
-                    enum TermResultType next_type;
-                    
-                    /* Skip past the operator. */
-                    source = skip_whitespace(++source);
-                    
-                    next_type = parse_callback(ctx, bld, error_text, &source,
-                        num_args, arg_names, &next_term);
-                    
-                    switch(next_type){
-                        case eTermImmediate:
+                for(i = 0; i < num_operations; i++){
+                    if(*source == operations[i].operator_char){
+                        union TermType next_term;
+                        enum TermResultType next_type;
+                        
+                        /* Skip past the operator. */
+                        source = skip_whitespace(++source);
+                        
+                        next_type = parse_callback(ctx, bld, error_text, &source,
+                            num_args, arg_names, &next_term);
+                        
+                        if(next_type == eTermImmediate){
                             if(type == eTermImmediate){
-                                term.immediate = (is_first) ?
-                                    first_op(term.immediate,
-                                        next_term.immediate) :
-                                    second_op(term.immediate,
-                                        next_term.immediate);
-                                continue;
+                                term.immediate = operations[i].immediate_op(
+                                    term.immediate, next_term.immediate);
                             }
-                            
-                            /* Flush the first argument */
-                            if(type == eTermArgument){
-                                DC_X_BuildPushArg(ctx->ctx,
-                                    bld, term.argument);
-                                type = eTermPushed;
+                            else{
+                                /* Flush the first argument */
+                                if(type == eTermArgument){
+                                    /* TODO: We /might/ be able to label
+                                     * operators that are transitive and
+                                     * re-order the arguments here. */
+                                    DC_X_BuildPushArg(ctx->ctx,
+                                        bld, term.argument);
+                                    type = eTermPushed;
+                                }
+                                /* else the arg was pushed. */
+                                
+                                /* TODO: We could parse the next term and then
+                                 * flush? */
+                                if(DC_OPTIMIZE_FETCH){
+                                    operations[i].build_imm_op(ctx->ctx, bld,
+                                        (float)next_term.immediate);
+                                }
+                                else{
+                                    DC_X_BuildPushImmediate(ctx->ctx,
+                                        bld, (float)next_term.immediate);
+                                    operations[i].build_op(ctx->ctx, bld);
+                                }
                             }
-                            
-                            /* TODO: We could parse the next term and then flush */
-                            DC_X_BuildPushImmediate(ctx->ctx,
-                                bld, (float)next_term.immediate);
-                            if(is_first)
-                                first_build(ctx->ctx, bld);
-                            else
-                                second_build(ctx->ctx, bld);
-                            continue;
-                        case eTermArgument:
-                            
+                            break;
+                        }
+                        else if(next_type == eTermArgument){
                             /* Flush the first argument */
                             if(type == eTermImmediate){
                                 DC_X_BuildPushImmediate(ctx->ctx,
@@ -515,25 +547,44 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
                                     bld, term.argument);
                                 type = eTermPushed;
                             }
-                            DC_X_BuildPushArg(ctx->ctx,
-                                bld, next_term.argument);
-                                
-                            /* FALLTHROUGH */
-                        case eTermPushed:
-                            if(is_first)
-                                first_build(ctx->ctx, bld);
-                            else
-                                second_build(ctx->ctx, bld);
-                            continue;
                             
-                        /* Handle all errors */
-                        default:
+                            if(DC_OPTIMIZE_FETCH){
+                                operations[i].build_arg_op(ctx->ctx, bld,
+                                    next_term.argument);
+                            }
+                            else{
+                                DC_X_BuildPushArg(ctx->ctx,
+                                    bld, next_term.argument);
+                                operations[i].build_op(ctx->ctx, bld);
+                            }
+                            break;
+                        }
+                        else if(next_type == eTermPushed){
+                            /* TODO: This seems like it's incorrect? */
+                            /* Flush the first argument */
+                            if(type == eTermImmediate){
+                                DC_X_BuildPushImmediate(ctx->ctx,
+                                    bld, (float)term.immediate);
+                                type = eTermPushed;
+                            }
+                            else if(type == eTermArgument){
+                                DC_X_BuildPushArg(ctx->ctx,
+                                    bld, term.argument);
+                                type = eTermPushed;
+                            }
+                            operations[i].build_op(ctx->ctx, bld);
+                            break;
+                        }
+                        else{
+                            /* Handle all errors */
                             return next_type;
+                        }
                     }
                 }
-                else{
+                
+                /* We did not find a matching operation. */
+                if(i == num_operations)
                     break;
-                }
             }
             
             source_ptr[0] = source;
@@ -569,12 +620,8 @@ static enum TermResultType parse_mul_ops(struct DC_Context *ctx,
         arg_names,
         out_term,
         parse_term,
-        '*',
-        '/',
-        arithmetic_operation_mul,
-        arithmetic_operation_div,
-        DC_X_BuildMul,
-        DC_X_BuildDiv);
+        dc_mul_ops,
+        DC_NUM_MUL_OPS);
 }
 
 /* Implements parsing terms separated by `+' and `-', calling into
@@ -595,12 +642,8 @@ static enum TermResultType parse_add_ops(struct DC_Context *ctx,
         arg_names,
         out_term,
         parse_mul_ops,
-        '+',
-        '-',
-        arithmetic_operation_add,
-        arithmetic_operation_sub,
-        DC_X_BuildAdd,
-        DC_X_BuildSub);
+        dc_add_ops,
+        DC_NUM_ADD_OPS);
 }
 
 struct DC_Calculation *DC_Compile(struct DC_Context *ctx,

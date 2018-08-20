@@ -99,6 +99,12 @@ void DC_X_Build ## NAME(struct DC_X_Context *ctx,\
     struct DC_X_CalculationBuilder *bld){\
     (void)ctx;\
     bld->at += DC_ASM_Write ## NAME(DC_X_GET_BUILDER_AT(bld));\
+}\
+void DC_X_Build ## NAME ## Arg(struct DC_X_Context *ctx,\
+    struct DC_X_CalculationBuilder *bld,\
+    unsigned short arg){\
+    (void)ctx;\
+    bld->at += DC_ASM_Write ## NAME ## Arg(DC_X_GET_BUILDER_AT(bld), arg);\
 }
 
 DC_X_OP(Add)
@@ -108,7 +114,26 @@ DC_X_OP(Div)
 DC_X_OP(Sin)
 DC_X_OP(Cos)
 DC_X_OP(Sqrt)
-DC_X_OP(Pop)
+
+
+#define DC_X_IMM_OP(NAME)\
+void DC_X_Build ## NAME ## Imm(struct DC_X_Context *ctx,\
+    struct DC_X_CalculationBuilder *bld,\
+    float imm){\
+    (void)ctx;\
+    bld->at += DC_ASM_Write ## NAME ## Imm(DC_X_GET_BUILDER_AT(bld), imm);\
+}
+
+DC_X_IMM_OP(Add)
+DC_X_IMM_OP(Sub)
+DC_X_IMM_OP(Mul)
+DC_X_IMM_OP(Div)
+
+void DC_X_BuildPop(struct DC_X_Context *ctx,
+    struct DC_X_CalculationBuilder *bld){
+    (void)ctx;
+    bld->at += DC_ASM_WritePop(DC_X_GET_BUILDER_AT(bld));
+}
 
 void DC_X_AbandonCalculation(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld){

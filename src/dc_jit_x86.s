@@ -28,9 +28,6 @@ global _DC_ASM_WriteMul
 global DC_ASM_div_size
 global _DC_ASM_WriteDiv
 
-global DC_ASM_pop_size
-global _DC_ASM_WritePop
-
 global DC_ASM_sin_size
 global _DC_ASM_WriteSin
 
@@ -39,6 +36,42 @@ global _DC_ASM_WriteCos
 
 global DC_ASM_sqrt_size
 global _DC_ASM_WriteSqrt
+
+global DC_ASM_add_arg_size
+global _DC_ASM_WriteAddArg
+
+global DC_ASM_sub_arg_size
+global _DC_ASM_WriteSubArg
+
+global DC_ASM_mul_arg_size
+global _DC_ASM_WriteMulArg
+
+global DC_ASM_div_arg_size
+global _DC_ASM_WriteDivArg
+
+global DC_ASM_sin_arg_size
+global _DC_ASM_WriteSinArg
+
+global DC_ASM_cos_arg_size
+global _DC_ASM_WriteCosArg
+
+global DC_ASM_sqrt_arg_size
+global _DC_ASM_WriteSqrtArg
+
+global DC_ASM_add_imm_size
+global _DC_ASM_WriteAddImm
+
+global DC_ASM_sub_imm_size
+global _DC_ASM_WriteSubImm
+
+global DC_ASM_mul_imm_size
+global _DC_ASM_WriteMulImm
+
+global DC_ASM_div_imm_size
+global _DC_ASM_WriteDivImm
+
+global DC_ASM_pop_size
+global _DC_ASM_WritePop
 
 global DC_ASM_ret_size
 global _DC_ASM_WriteRet
@@ -218,12 +251,18 @@ _DC_ASM_WritePop:
     mov [dc_asm_index], eax
     xor eax, eax
     ret
-
+    
+_DC_ASM_WriteCosArg:
+    call _DC_ASM_WritePushArg
+    ; FALLTHROUGH
 ; unsigned DCJIT_CDECL DC_ASM_WriteCos(void *dest);
 _DC_ASM_WriteCos:
     push 0xFF
     jmp dc_asm_trig_func
 
+_DC_ASM_WriteSinArg:
+    call _DC_ASM_WritePushArg
+    ; FALLTHROUGH
 ; unsigned DCJIT_CDECL DC_ASM_WriteSin(void *dest);
 _DC_ASM_WriteSin:
     push 0xFE
@@ -273,6 +312,125 @@ dc_asm_x87_trig:
     mov eax, 18
     ret
 
+_DC_ASM_WriteSqrtArg:
+    mov eax, dc_asm_index
+    mov ecx, [eax]
+    inc DWORD [eax]
+    ; Get the XMM register
+    mov edx, [ecx+dc_asm_unary_codes]
+    
+    ; Get the destination
+    mov eax, [esp+4]
+    ; Get the arg number
+    mov ecx, [esp+8]
+    cmp ecx, 0
+    jnz dc_sqrt_nonzero_argument_index
+    or edx, 0xF30F5100
+    bswap edx
+    mov [eax], edx
+    mov eax, 4
+    ret
+
+dc_sqrt_nonzero_argument_index:
+    or edx, 0xF30F5140
+    bswap edx
+    mov [eax], edx
+    rol cx, 2
+    mov [eax+4], cx
+    mov eax, 5
+    ret
+
+_DC_ASM_WriteAddArg:
+    mov ch, 0x58
+    jmp dc_asm_write_arg_arithmetic
+
+_DC_ASM_WriteSubArg:
+    mov ch, 0x5C
+    jmp dc_asm_write_arg_arithmetic
+
+_DC_ASM_WriteDivArg:
+    mov ch, 0x5E
+    jmp dc_asm_write_arg_arithmetic
+
+    ; This is placed at the end, as it is somewhat more likely
+_DC_ASM_WriteMulArg:
+    mov ch, 0x59
+    ; jmp dc_asm_write_arg_arithmetic
+
+dc_asm_write_arg_arithmetic:
+    ; Get the current stack
+    mov eax, dc_asm_index
+    mov eax, [eax]
+    ; Get the XMM register
+    mov cl, [eax+dc_asm_unary_codes-1]
+    movzx edx, cx
+    or edx, 0xF30F0000
+    
+    ; Get the destination
+    mov eax, [esp+4]
+    
+    ; Get the arg number
+    mov ecx, [esp+8]
+    
+    cmp ecx, 0
+    jz dc_asm_write_zero_arg_arithmetic
+    shl cl, 2
+    or dl, 0x40
+    bswap edx
+    mov [eax], edx
+    mov [eax+4], cl
+    mov eax, 5
+    ret
+dc_asm_write_zero_arg_arithmetic:
+    bswap edx
+    mov [eax], edx
+    mov eax, 4
+    ret
+
+; unsigned DCJIT_CDECL DC_ASM_WriteAddImm(void *dest, unsigned short arg);
+_DC_ASM_WriteAddImm:
+    mov ecx, 0xF30F5800
+    jmp dc_asm_write_imm_arithmetic
+
+; unsigned DCJIT_CDECL DC_ASM_WriteSubImm(void *dest, unsigned short arg);
+_DC_ASM_WriteSubImm:
+    mov ecx, 0xF30F5C00
+    jmp dc_asm_write_imm_arithmetic
+
+; unsigned DCJIT_CDECL DC_ASM_WriteDivImm(void *dest, unsigned short arg);
+_DC_ASM_WriteDivImm:
+    mov ecx, 0xF30F5E00
+    jmp dc_asm_write_imm_arithmetic
+
+; unsigned DCJIT_CDECL DC_ASM_WriteMulImm(void *dest, unsigned short arg);
+_DC_ASM_WriteMulImm:
+    mov ecx, 0xF30F5900
+    ; jmp dc_asm_write_imm_arithmetic
+
+dc_asm_write_imm_arithmetic:
+    ; Write:
+    ; push IMM
+    ; opss XMM, [esp]
+    ; pop eax
+    
+    ; Get the destination
+    mov eax, [esp+4]
+    ; Get the immediate
+    mov edx, [esp+8]
+    mov [eax], BYTE 0x68
+    mov [eax+1], edx
+    
+    ; Get the current stack
+    movzx edx, BYTE [dc_asm_index]
+    lea edx, [((edx-1) * 8) + 4]
+    mov cl, dl
+    ; Get the XMM register
+    bswap ecx
+    mov [eax+5], ecx
+    mov [eax+9], WORD 0x5824
+    mov eax, 11
+    ret
+
 ; unsigned DCJIT_CDECL DC_ASM_WriteRet(void *dest);
 _DC_ASM_WriteRet:
     dec DWORD [dc_asm_index]
@@ -296,11 +454,20 @@ section .bss
 
 section .data
     
+    ; These indicate (XMM(N), XMM(N-1). Subtract 0xC8 to just get XMM(N)
     dc_asm_arithmetic_codes: db 0xC1,0xCA,0xD3,0xDC,0xE5,0xEE,0xF7
-    
+    dc_asm_unary_codes: db 0x02, 0x0A, 0x12, 0x1A, 0x22, 0x2A, 0x32, 0x3A
+
+    DC_ASM_cos_arg_size: ; FALLTHROUGH
+    DC_ASM_sin_arg_size: dd 30
     DC_ASM_cos_size: ; FALLTHROUGH
     DC_ASM_sin_size: dd 24
+    DC_ASM_sqrt_arg_size: ; FALLTHROUGH
     DC_ASM_jmp_size: dd 6
+    DC_ASM_add_arg_size: ; FALLTHROUGH
+    DC_ASM_sub_arg_size: ; FALLTHROUGH
+    DC_ASM_mul_arg_size: ; FALLTHROUGH
+    DC_ASM_div_arg_size: ; FALLTHROUGH
     DC_ASM_push_arg_size: dd 5
     DC_ASM_immediate_size: dd 14
     DC_ASM_sub_size: ; FALLTHROUGH
