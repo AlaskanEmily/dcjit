@@ -52,11 +52,15 @@ DCJIT_SOFT_OBJECTS=dc_soft.obj
 dcjit_soft.lib: $(DCJIT_SOFT_OBJECTS)
 	lib /nologo /OUT:dcjit_soft.lib $(DCJIT_SOFT_OBJECTS)
 
-
 OBJECTS=dc_main.obj dc_core.obj
 
-dc.exe: $(OBJECTS) dcjit_$(DCJITARCH)_win32.lib
-	$(LINK) $(LINKFLAGS) $(OBJECTS) dcjit_$(DCJITARCH)_win32.lib /OUT:dc.exe
+# Change this to select a different backend.
+DCJITBACKEND=$(DCJITARCH)_win32
+# DCJITBACKEND=soft
+
+DCJITLIBRARY=dcjit_$(DCJITBACKEND).lib
+dc.exe: $(OBJECTS) $(DCJITLIBRARY)
+	$(LINK) $(LINKFLAGS) $(OBJECTS) $(DCJITLIBRARY) /OUT:dc.exe
 
 clean:
 	@del /Q *.obj 2> nul || echo ""> nul
