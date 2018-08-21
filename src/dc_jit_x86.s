@@ -460,6 +460,10 @@ section .data
 
     DC_ASM_cos_arg_size: ; FALLTHROUGH
     DC_ASM_sin_arg_size: dd 30
+    DC_ASM_add_imm_size: ; FALLTHROUGH
+    DC_ASM_sub_imm_size: ; FALLTHROUGH
+    DC_ASM_div_imm_size: ; FALLTHROUGH
+    DC_ASM_mul_imm_size: ; FALLTHROUGH
     DC_ASM_cos_size: ; FALLTHROUGH
     DC_ASM_sin_size: dd 24
     DC_ASM_sqrt_arg_size: ; FALLTHROUGH

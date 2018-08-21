@@ -5,8 +5,9 @@
 
 /* Gets us strndup on not-windows. */
 #define _BSD_SOURCE
+#define _DEFAULT_SOURCE
 
-/* Might get us sscanf_s? */
+/* Might get us sscanf_s? Probably not. */
 #define __STDC_WANT_LIB_EXT1__ 
 
 #include <string.h>
@@ -16,7 +17,7 @@
 
 #ifdef __GNUC__
 
-#define DC_STRNDUP stdndup
+#define DC_STRNDUP strdndup
 
 #else
 

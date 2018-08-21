@@ -21,10 +21,19 @@
 extern "C" {
 #endif
 
-#ifdef __GNUC__
-#define DCJIT_CDECL __attribute__((cdecl))
+
+#if !(defined __i386 || defined _M_IX86)
+    #define C_DEMANGLE_NAME(X) X
+#elif defined _WIN32 || defined WIN32 || defined __CYGWIN__
+    #define C_DEMANGLE_NAME(X) X
 #else
-#define DCJIT_CDECL _cdecl
+    #define C_DEMANGLE_NAME(X) _ ## X
+#endif
+
+#ifdef __GNUC__
+#define DCJIT_CDECL(X) __attribute__((cdecl)) C_DEMANGLE_NAME(X)
+#else
+#define DCJIT_CDECL(X) _cdecl C_DEMANGLE_NAME(X)
 #endif
 
 /* Implemented by the platform memory backend. This is mmap on Unix. */
@@ -45,79 +54,79 @@ void DC_JIT_FreePage(struct DC_JIT_Page *);
 
 /* Implemented by the JIT/ASM backend. */
 extern const unsigned DC_ASM_jmp_size;
-unsigned DCJIT_CDECL DC_ASM_WriteJMP(void *asm_dest, void *jmp_dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteJMP(void *asm_dest, void *jmp_dest));
 
 extern const unsigned DC_ASM_immediate_size;
-unsigned DCJIT_CDECL DC_ASM_WriteImmediate(void *dest, float value);
+unsigned DCJIT_CDECL(DC_ASM_WriteImmediate(void *dest, float value));
 
 extern const unsigned DC_ASM_push_arg_size;
-unsigned DCJIT_CDECL DC_ASM_WritePushArg(void *dest,
-    unsigned short arg_num);
+unsigned DCJIT_CDECL(DC_ASM_WritePushArg(void *dest,
+    unsigned short arg_num));
 
 extern const unsigned DC_ASM_pop_size;
-unsigned DCJIT_CDECL DC_ASM_WritePop(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WritePop(void *dest));
 
 extern const unsigned DC_ASM_add_size;
-unsigned DCJIT_CDECL DC_ASM_WriteAdd(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteAdd(void *dest));
 
 extern const unsigned DC_ASM_sub_size;
-unsigned DCJIT_CDECL DC_ASM_WriteSub(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteSub(void *dest));
 
 extern const unsigned DC_ASM_mul_size;
-unsigned DCJIT_CDECL DC_ASM_WriteMul(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteMul(void *dest));
 
 extern const unsigned DC_ASM_div_size;
-unsigned DCJIT_CDECL DC_ASM_WriteDiv(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteDiv(void *dest));
 
 extern const unsigned DC_ASM_sin_size;
-unsigned DCJIT_CDECL DC_ASM_WriteSin(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteSin(void *dest));
 
 extern const unsigned DC_ASM_cos_size;
-unsigned DCJIT_CDECL DC_ASM_WriteCos(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteCos(void *dest));
 
 extern const unsigned DC_ASM_sqrt_size;
-unsigned DCJIT_CDECL DC_ASM_WriteSqrt(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteSqrt(void *dest));
 
 extern const unsigned DC_ASM_ret_size;
-unsigned DCJIT_CDECL DC_ASM_WriteRet(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteRet(void *dest));
 
 extern const unsigned DC_ASM_add_arg_size;
-unsigned DCJIT_CDECL DC_ASM_WriteAddArg(void *dest, unsigned short arg);
+unsigned DCJIT_CDECL(DC_ASM_WriteAddArg(void *dest, unsigned short arg));
 
 extern const unsigned DC_ASM_sub_arg_size;
-unsigned DCJIT_CDECL DC_ASM_WriteSubArg(void *dest, unsigned short arg);
+unsigned DCJIT_CDECL(DC_ASM_WriteSubArg(void *dest, unsigned short arg));
 
 extern const unsigned DC_ASM_mul_arg_size;
-unsigned DCJIT_CDECL DC_ASM_WriteMulArg(void *dest, unsigned short arg);
+unsigned DCJIT_CDECL(DC_ASM_WriteMulArg(void *dest, unsigned short arg));
 
 extern const unsigned DC_ASM_div_arg_size;
-unsigned DCJIT_CDECL DC_ASM_WriteDivArg(void *dest, unsigned short arg);
+unsigned DCJIT_CDECL(DC_ASM_WriteDivArg(void *dest, unsigned short arg));
 
 extern const unsigned DC_ASM_sin_arg_size;
-unsigned DCJIT_CDECL DC_ASM_WriteSinArg(void *dest, unsigned short arg);
+unsigned DCJIT_CDECL(DC_ASM_WriteSinArg(void *dest, unsigned short arg));
 
 extern const unsigned DC_ASM_cos_arg_size;
-unsigned DCJIT_CDECL DC_ASM_WriteCosArg(void *dest, unsigned short arg);
+unsigned DCJIT_CDECL(DC_ASM_WriteCosArg(void *dest, unsigned short arg));
 
 extern const unsigned DC_ASM_sqrt_arg_size;
-unsigned DCJIT_CDECL DC_ASM_WriteSqrtArg(void *dest, unsigned short arg);
+unsigned DCJIT_CDECL(DC_ASM_WriteSqrtArg(void *dest, unsigned short arg));
 
 extern const unsigned DC_ASM_add_imm_size;
-unsigned DCJIT_CDECL DC_ASM_WriteAddImm(void *dest, float imm);
+unsigned DCJIT_CDECL(DC_ASM_WriteAddImm(void *dest, float imm));
 
 extern const unsigned DC_ASM_sub_imm_size;
-unsigned DCJIT_CDECL DC_ASM_WriteSubImm(void *dest, float imm);
+unsigned DCJIT_CDECL(DC_ASM_WriteSubImm(void *dest, float imm));
 
 extern const unsigned DC_ASM_mul_imm_size;
-unsigned DCJIT_CDECL DC_ASM_WriteMulImm(void *dest, float imm);
+unsigned DCJIT_CDECL(DC_ASM_WriteMulImm(void *dest, float imm));
 
 extern const unsigned DC_ASM_div_imm_size;
-unsigned DCJIT_CDECL DC_ASM_WriteDivImm(void *dest, float imm);
+unsigned DCJIT_CDECL(DC_ASM_WriteDivImm(void *dest, float imm));
 
 extern const unsigned DC_ASM_ret_size;
-unsigned DCJIT_CDECL DC_ASM_WriteRet(void *dest);
+unsigned DCJIT_CDECL(DC_ASM_WriteRet(void *dest));
 
-void DCJIT_CDECL DC_ASM_Calculate(const void *addr, const float *args, float *result);
+void DCJIT_CDECL(DC_ASM_Calculate(const void *addr, const float *args, float *result));
 
 #ifdef __cplusplus
 } // extern "C"

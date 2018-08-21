@@ -6,6 +6,10 @@
 
 #include "dc_jit.h"
 
+/* This gets us MAP_ANONYMOUS on newer Linux. */
+#define _BSD_SOURCE
+#define _DEFAULT_SOURCE
+
 #include <unistd.h>
 #include <sys/mman.h>
 
@@ -17,6 +21,15 @@ static unsigned page_size(){
 #endif
 }
 
+#ifdef MAP_ANONYMOUS
+    #define DC_MAP_ANON MAP_ANONYMOUS
+#elif defined MAP_ANON
+    #define DC_MAP_ANON MAP_ANON
+#else
+    #error Fix the defines before including mman so that we get MAP_ANONYMOUS
+#endif
+
+
 unsigned DC_JIT_PageSize(){
     static unsigned size = 0;
     if(size == 0)
@@ -27,7 +40,7 @@ unsigned DC_JIT_PageSize(){
 /* Allocs a page with write-only permissions. */
 struct DC_JIT_Page *DC_JIT_AllocPage(){
     const unsigned page_size = DC_JIT_PageSize();
-    return mmap(NULL, page_size, PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    return mmap(NULL, page_size, PROT_WRITE, MAP_PRIVATE|DC_MAP_ANON, -1, 0);
 }
 
 void *DC_JIT_GetPageData(struct DC_JIT_Page *p){
