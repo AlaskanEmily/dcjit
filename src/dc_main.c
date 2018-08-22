@@ -100,7 +100,7 @@ int main(int argc, char **argv){
         
         if(at != 0){
             struct DC_Calculation *const calc =
-                DC_Compile(ctx, buffer, num_args, argument_names);
+                DC_Compile(ctx, buffer, num_args, (const char*const *)argument_names);
             if(calc == NULL){
                 fputs("Could not create calculation.\n", stderr);
                 continue;

@@ -30,9 +30,9 @@
 
 
 #ifdef _MSC_VER
-    #define DC_STRNCPY(DEST, LEN, TXT) strncpy_s((DEST), (LEN),  (TXT), _TRUNCATE)
+    #define DC_STRNCPY(DST, LEN, TXT) strncpy_s((DST), (LEN),  (TXT), _TRUNCATE)
 #else
-    #define DC_STRNCPY(DEST, LEN, TXT) do {\
+    #define DC_STRNCPY(DST, LEN, TXT) do {\
         char *const DC_STRNCPY_dst = (DST);\
         const long DC_STRNCPY_len = (LEN);\
         strncpy(DC_STRNCPY_dst, (TXT), DC_STRNCPY_len);\
@@ -421,6 +421,8 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
     type = parse_value(source_ptr, num_args, arg_names, &result);
     switch(type){
         /* Convert any errors to error text. */
+        case eTermSyntaxError:
+            break;
         case eTermInvalidArgNumber:
             snprintf(error_text,
                 0x100,
@@ -681,9 +683,7 @@ struct DC_Calculation *DC_Compile(struct DC_Context *ctx,
             default:
                 return calc;
     }
-    fputs("INTERNAL ERROR ", stderr);
-    fputs(__FUNCTION__, stderr);
-    fputc('\n', stderr);
+    fputs("INTERNAL ERROR\n", stderr);
     abort();
     return 0;
 }
