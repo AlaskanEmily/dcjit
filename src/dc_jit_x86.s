@@ -11,74 +11,98 @@ global DC_ASM_jmp_size
 global _DC_ASM_WriteJMP
 
 global DC_ASM_push_arg_size
+global DC_ASM_WritePushArg
 global _DC_ASM_WritePushArg
 
 global DC_ASM_immediate_size
+global DC_ASM_WriteImmediate
 global _DC_ASM_WriteImmediate
 
 global DC_ASM_add_size
+global DC_ASM_WriteAdd
 global _DC_ASM_WriteAdd
 
 global DC_ASM_sub_size
+global DC_ASM_WriteSub
 global _DC_ASM_WriteSub
 
 global DC_ASM_mul_size
+global DC_ASM_WriteMul
 global _DC_ASM_WriteMul
 
 global DC_ASM_div_size
+global DC_ASM_WriteDiv
 global _DC_ASM_WriteDiv
 
 global DC_ASM_sin_size
+global DC_ASM_WriteSin
 global _DC_ASM_WriteSin
 
 global DC_ASM_cos_size
+global DC_ASM_WriteCos
 global _DC_ASM_WriteCos
 
 global DC_ASM_sqrt_size
+global DC_ASM_WriteSqrt
 global _DC_ASM_WriteSqrt
 
 global DC_ASM_add_arg_size
+global DC_ASM_WriteAddArg
 global _DC_ASM_WriteAddArg
 
 global DC_ASM_sub_arg_size
+global DC_ASM_WriteSubArg
 global _DC_ASM_WriteSubArg
 
 global DC_ASM_mul_arg_size
+global DC_ASM_WriteMulArg
 global _DC_ASM_WriteMulArg
 
 global DC_ASM_div_arg_size
+global DC_ASM_WriteDivArg
 global _DC_ASM_WriteDivArg
 
 global DC_ASM_sin_arg_size
+global DC_ASM_WriteSinArg
 global _DC_ASM_WriteSinArg
 
 global DC_ASM_cos_arg_size
+global DC_ASM_WriteCosArg
 global _DC_ASM_WriteCosArg
 
 global DC_ASM_sqrt_arg_size
+global DC_ASM_WriteSqrtArg
 global _DC_ASM_WriteSqrtArg
 
 global DC_ASM_add_imm_size
+global DC_ASM_WriteAddImm
 global _DC_ASM_WriteAddImm
 
 global DC_ASM_sub_imm_size
+global DC_ASM_WriteSubImm
 global _DC_ASM_WriteSubImm
 
 global DC_ASM_mul_imm_size
+global DC_ASM_WriteMulImm
 global _DC_ASM_WriteMulImm
 
 global DC_ASM_div_imm_size
+global DC_ASM_WriteDivImm
 global _DC_ASM_WriteDivImm
 
 global DC_ASM_pop_size
+global DC_ASM_WritePop
 global _DC_ASM_WritePop
 
 global DC_ASM_ret_size
+global DC_ASM_WriteRet
 global _DC_ASM_WriteRet
 
+global DC_ASM_Calculate
 global _DC_ASM_Calculate
 
 ; void DC_ASM_WriteJMP(void *asm_dest, void *jmp_dest);
+DC_ASM_WriteJMP:
 _DC_ASM_WriteJMP:
     mov eax, [esp + 4]
     mov edx, [esp + 8]
@@ -90,6 +114,7 @@ _DC_ASM_WriteJMP:
 
 ; void DC_ASM_WritePushArg(void *dest, unsigned short arg_num);
 
+DC_ASM_WritePushArg:
 _DC_ASM_WritePushArg:
     mov eax, [esp+4] ; get the dest
 ; Write the 0xF3 0x0F 0x10 prefix that all push ops use.
@@ -162,6 +187,7 @@ dc_asm_immediate_one:
     ret
 
 ; unsigned DC_ASM_WriteImmediate(void *dest, float value);
+DC_ASM_WriteImmediate:
 _DC_ASM_WriteImmediate:
     mov eax, [esp+4] ; Get the dest
     
@@ -201,6 +227,7 @@ _DC_ASM_WriteImmediate:
 ; unsigned DCJIT_CDECL DC_ASM_WriteSqrt(void *dest);
 ; Since this does not change the stack pointer, it can't be folded with the
 ; other arithmetic ops
+DC_ASM_WriteSqrt:
 _DC_ASM_WriteSqrt:
     mov ecx, 0xF30F5101
     mov eax, [dc_asm_index]
@@ -212,22 +239,26 @@ _DC_ASM_WriteSqrt:
     ret
 
 ; unsigned DCJIT_CDECL DC_ASM_WriteAdd(void *dest);
+DC_ASM_WriteAdd:
 _DC_ASM_WriteAdd:
     mov ecx, 0xF30F5800
     jmp dc_asm_write_arithmetic
     
 ; unsigned DCJIT_CDECL DC_ASM_WriteSub(void *dest);
+DC_ASM_WriteSub:
 _DC_ASM_WriteSub:
     mov ecx, 0xF30F5C00
     jmp dc_asm_write_arithmetic
 
 ; unsigned DCJIT_CDECL DC_ASM_WriteDiv(void *dest);
+DC_ASM_WriteDiv:
 _DC_ASM_WriteDiv:
     mov ecx, 0xF30F5E00
     jmp dc_asm_write_arithmetic
 
 ; unsigned DCJIT_CDECL DC_ASM_WriteMul(void *dest);
 ; Mul is last, since it's the most likely and we can avoid a jmp.
+DC_ASM_WriteMul:
 _DC_ASM_WriteMul:
     mov ecx, 0xF30F5900
     ; jmp dc_asm_write_arithmetic
@@ -244,6 +275,7 @@ dc_asm_write_arithmetic:
     ret
 
 ; unsigned DC_ASM_WritePop(void *dest, unsigned short arg_num);
+DC_ASM_WritePop:
 _DC_ASM_WritePop:
 ; TODO: Check if we have overflowed into the CPU stack.
     mov eax, [dc_asm_index]
@@ -252,18 +284,22 @@ _DC_ASM_WritePop:
     xor eax, eax
     ret
     
+DC_ASM_WriteCosArg:
 _DC_ASM_WriteCosArg:
     call _DC_ASM_WritePushArg
     ; FALLTHROUGH
 ; unsigned DCJIT_CDECL DC_ASM_WriteCos(void *dest);
+DC_ASM_WriteCos:
 _DC_ASM_WriteCos:
     push 0xFF
     jmp dc_asm_trig_func
 
+DC_ASM_WriteSinArg:
 _DC_ASM_WriteSinArg:
     call _DC_ASM_WritePushArg
     ; FALLTHROUGH
 ; unsigned DCJIT_CDECL DC_ASM_WriteSin(void *dest);
+DC_ASM_WriteSin:
 _DC_ASM_WriteSin:
     push 0xFE
     ; dc_asm_trig_func
@@ -312,6 +348,7 @@ dc_asm_x87_trig:
     mov eax, 18
     ret
 
+DC_ASM_WriteSqrtArg:
 _DC_ASM_WriteSqrtArg:
     mov eax, dc_asm_index
     mov ecx, [eax]
@@ -340,19 +377,23 @@ dc_sqrt_nonzero_argument_index:
     mov eax, 5
     ret
 
+DC_ASM_WriteAddArg:
 _DC_ASM_WriteAddArg:
     mov ch, 0x58
     jmp dc_asm_write_arg_arithmetic
 
+DC_ASM_WriteSubArg:
 _DC_ASM_WriteSubArg:
     mov ch, 0x5C
     jmp dc_asm_write_arg_arithmetic
 
+DC_ASM_WriteDivArg:
 _DC_ASM_WriteDivArg:
     mov ch, 0x5E
     jmp dc_asm_write_arg_arithmetic
 
     ; This is placed at the end, as it is somewhat more likely
+DC_ASM_WriteMulArg:
 _DC_ASM_WriteMulArg:
     mov ch, 0x59
     ; jmp dc_asm_write_arg_arithmetic
@@ -388,21 +429,25 @@ dc_asm_write_zero_arg_arithmetic:
     ret
 
 ; unsigned DCJIT_CDECL DC_ASM_WriteAddImm(void *dest, unsigned short arg);
+DC_ASM_WriteAddImm:
 _DC_ASM_WriteAddImm:
     mov ecx, 0xF30F5800
     jmp dc_asm_write_imm_arithmetic
 
 ; unsigned DCJIT_CDECL DC_ASM_WriteSubImm(void *dest, unsigned short arg);
+DC_ASM_WriteSubImm:
 _DC_ASM_WriteSubImm:
     mov ecx, 0xF30F5C00
     jmp dc_asm_write_imm_arithmetic
 
 ; unsigned DCJIT_CDECL DC_ASM_WriteDivImm(void *dest, unsigned short arg);
+DC_ASM_WriteDivImm:
 _DC_ASM_WriteDivImm:
     mov ecx, 0xF30F5E00
     jmp dc_asm_write_imm_arithmetic
 
 ; unsigned DCJIT_CDECL DC_ASM_WriteMulImm(void *dest, unsigned short arg);
+DC_ASM_WriteMulImm:
 _DC_ASM_WriteMulImm:
     mov ecx, 0xF30F5900
     ; jmp dc_asm_write_imm_arithmetic
@@ -432,6 +477,7 @@ dc_asm_write_imm_arithmetic:
     ret
 
 ; unsigned DCJIT_CDECL DC_ASM_WriteRet(void *dest);
+DC_ASM_WriteRet:
 _DC_ASM_WriteRet:
     dec DWORD [dc_asm_index]
     mov eax, [esp+4]
@@ -441,6 +487,7 @@ _DC_ASM_WriteRet:
     ret
 
 ; float DC_ASM_Calculate(void *addr, const float *args, float *result);
+DC_ASM_Calculate:
 _DC_ASM_Calculate:
     mov edx, [esp+8]
     call [esp+4]
