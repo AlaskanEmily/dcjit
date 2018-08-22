@@ -1,9 +1,13 @@
 # Any copyright is dedicated to the Public Domain.
 # http://creativecommons.org/publicdomain/zero/1.0/
 
-all: dc
+EXT?=
+SO?=.so
 
-SYSFLAGS=-g
+all: dc$(EXT) dc$(SO)
+
+SYSFLAGS?=-g
+SYSFLAGS+=-fPIC
 LINKFLAGS=$(SYSFLAGS)
 CCFLAGS=-Wall -Wextra -pedantic -Werror -Os $(SYSFLAGS)
 CFLAGS=$(CCFLAGS) -ansi -Wenum-compare -Wshadow
@@ -11,10 +15,14 @@ CXXFLAGS=$(CCFLAGS) -std=c++98 -fno-rtti -fno-exceptions
 
 CC?=gcc
 CXX?=g++
+AR?=emar
+RANLIB?=ranlib
 
-BACKEND?=soft
 ARCH?=x86
 PLATFORM?=unix
+BACKEND?=$(ARCH)_$(PLATFORM)
+#BACKEND?=soft
+
 
 dc_main.o: dc_main.c dc.h
 	$(CC) $(CFLAGS) -c dc_main.c -o dc_main.o
@@ -27,8 +35,8 @@ dc_soft.o: dc_soft.cpp dc_backend.h
 	$(CXX) $(CXXFLAGS) -c dc_soft.cpp -o dc_soft.o
 
 libdcjit_soft.a: dc_soft.o
-	ar rc libdcjit_soft.a dc_soft.o
-	ranlib libdcjit_soft.a
+	$(AR) rc libdcjit_soft.a dc_soft.o
+	$(RANLIB) libdcjit_soft.a
 
 # JIT platform components
 dc_jit_unix.o: dc_jit_unix.c dc_jit.h
@@ -46,13 +54,27 @@ dc_jit.o: dc_jit.c dc_jit.h dc_backend.h
 	$(CC) $(CFLAGS) -c dc_jit.c -o dc_jit.o
 
 libdcjit_x86_unix.a: dc_jit_x86.o dc_jit_unix.o dc_jit.o
-	ar rc libdcjit_x86_unix.a dc_jit_x86.o dc_jit_unix.o dc_jit.o
-	ranlib libdcjit_x86_unix.a
+	$(AR) rc libdcjit_x86_unix.a dc_jit_x86.o dc_jit_unix.o dc_jit.o
+	$(RANLIB) libdcjit_x86_unix.a
+
+# Emscripten components
+dc_js.o: dc_js.cpp dc_backend.h
+	$(CXX) $(CXXFLAGS) -std=c++14 -c dc_js.cpp -o dc_js.o
+
+libdcjit_js.a: dc_js.o
+	$(AR) rc libdcjit_js.a dc_js.o
+	$(RANLIB) libdcjit_js.a
 
 OBJECTS=dc_main.o dc_core.o
 
-dc: $(OBJECTS) libdcjit_$(ARCH)_$(PLATFORM).a
-	$(CXX) $(LINKFLAGS) $(OBJECTS) libdcjit_$(ARCH)_$(PLATFORM).a -o dc
+dc$(SO): $(OBJECTS) libdcjit_$(BACKEND).a
+	$(CXX) $(LINKFLAGS) -shared dc_core.o libdcjit_$(BACKEND).a -o dc$(SO)
+
+dc$(EXT): $(OBJECTS) libdcjit_$(BACKEND).a
+	$(CXX) $(LINKFLAGS) $(OBJECTS) libdcjit_$(BACKEND).a -o dc$(EXT)
+
+emscripten: dc$(SO)
+	cat dc_jit_js.js dc$(SO) > libdc.js
 
 clean:
 	rm *.o *.a
