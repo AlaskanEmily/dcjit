@@ -17,7 +17,7 @@
 
 #ifdef __GNUC__
 
-#define DC_STRNDUP strdndup
+#define DC_STRNDUP strndup
 
 #else
 
