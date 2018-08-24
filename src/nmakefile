@@ -33,6 +33,11 @@ dc_jit_x86.obj: dc_jit_x86.s
 dc_jit_amd64.obj: dc_jit_amd64.s
 	yasm -f win64 -Worphan-labels dc_jit_amd64.s
 
+# This object provides calling convention conversions from the Win64 ABI to
+# the SysV ABI calling convention that dc_jit_amd64 implements.
+dc_jit_win64.obj: dc_jit_win64.s
+	yasm -f win64 -Worphan-labels dc_jit_win64.s
+
 # General JIT components
 dc_jit.obj: dc_jit.c dc_jit.h dc_backend.h
 	$(CL) $(CLFLAGS) /c dc_jit.c
@@ -44,7 +49,7 @@ DCJIT_X86_WIN32_OBJECTS=dc_jit.obj dc_jit_x86.obj dc_jit_win32.obj
 dcjit_x86_win32.lib: $(DCJIT_X86_WIN32_OBJECTS)
 	lib /nologo /OUT:dcjit_x86_win32.lib $(DCJIT_X86_WIN32_OBJECTS)
 
-DCJIT_AMD64_WIN32_OBJECTS=dc_jit.obj dc_jit_amd64.obj dc_jit_win32.obj dc_jit_simple.obj
+DCJIT_AMD64_WIN32_OBJECTS=dc_jit.obj dc_jit_amd64.obj dc_jit_win64.obj dc_jit_win32.obj dc_jit_simple.obj
 dcjit_amd64_win32.lib: $(DCJIT_AMD64_WIN32_OBJECTS)
 	lib /nologo /OUT:dcjit_amd64_win32.lib $(DCJIT_AMD64_WIN32_OBJECTS)
 

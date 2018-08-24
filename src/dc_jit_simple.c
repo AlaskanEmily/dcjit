@@ -18,8 +18,8 @@
 #define ARG_OP(NAME)\
 unsigned DC_ASM_Write ## NAME ## Arg(void *dest,\
     unsigned short arg){\
-    const unsigned s0 = DC_ASM_WritePushArg(dest, arg);\
-    const unsigned s1 = DC_ASM_Write ## NAME(((unsigned char *)dest)+s0);\
+    const unsigned s0 = C_DEMANGLE_NAME(DC_ASM_WritePushArg)(dest, arg);\
+    const unsigned s1 = C_DEMANGLE_NAME(DC_ASM_Write ## NAME)(((unsigned char *)dest)+s0);\
     return s0 + s1;\
 }
 

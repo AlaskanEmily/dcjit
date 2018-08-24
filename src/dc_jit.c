@@ -84,27 +84,29 @@ void DC_X_BuildPushImmediate(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     float value){
     (void)ctx;
-    bld->at += DC_ASM_WriteImmediate(DC_X_GET_BUILDER_AT(bld), value);
+    bld->at += C_DEMANGLE_NAME(DC_ASM_WriteImmediate)(
+        DC_X_GET_BUILDER_AT(bld), value);
 }
 
 void DC_X_BuildPushArg(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     unsigned short arg_num){
     (void)ctx;
-    bld->at += DC_ASM_WritePushArg(DC_X_GET_BUILDER_AT(bld), arg_num);
+    bld->at += C_DEMANGLE_NAME(DC_ASM_WritePushArg)(
+        DC_X_GET_BUILDER_AT(bld), arg_num);
 }
 
 #define DC_X_OP(NAME)\
 void DC_X_Build ## NAME(struct DC_X_Context *ctx,\
     struct DC_X_CalculationBuilder *bld){\
     (void)ctx;\
-    bld->at += DC_ASM_Write ## NAME(DC_X_GET_BUILDER_AT(bld));\
+    bld->at += C_DEMANGLE_NAME(DC_ASM_Write ## NAME)(DC_X_GET_BUILDER_AT(bld));\
 }\
 void DC_X_Build ## NAME ## Arg(struct DC_X_Context *ctx,\
     struct DC_X_CalculationBuilder *bld,\
     unsigned short arg){\
     (void)ctx;\
-    bld->at += DC_ASM_Write ## NAME ## Arg(DC_X_GET_BUILDER_AT(bld), arg);\
+    bld->at += C_DEMANGLE_NAME(DC_ASM_Write ## NAME ## Arg)(DC_X_GET_BUILDER_AT(bld), arg);\
 }
 
 DC_X_OP(Add)
@@ -121,7 +123,7 @@ void DC_X_Build ## NAME ## Imm(struct DC_X_Context *ctx,\
     struct DC_X_CalculationBuilder *bld,\
     float imm){\
     (void)ctx;\
-    bld->at += DC_ASM_Write ## NAME ## Imm(DC_X_GET_BUILDER_AT(bld), imm);\
+    bld->at += C_DEMANGLE_NAME(DC_ASM_Write ## NAME ## Imm)(DC_X_GET_BUILDER_AT(bld), imm);\
 }
 
 DC_X_IMM_OP(Add)
@@ -132,7 +134,7 @@ DC_X_IMM_OP(Div)
 void DC_X_BuildPop(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld){
     (void)ctx;
-    bld->at += DC_ASM_WritePop(DC_X_GET_BUILDER_AT(bld));
+    bld->at += C_DEMANGLE_NAME(DC_ASM_WritePop)(DC_X_GET_BUILDER_AT(bld));
 }
 
 void DC_X_AbandonCalculation(struct DC_X_Context *ctx,
@@ -145,7 +147,7 @@ struct DC_X_Calculation *DC_X_FinalizeCalculation(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld){
     
     struct DC_JIT_Page *const new_page = DC_JIT_AllocPage();
-    bld->at += DC_ASM_WriteRet(DC_X_GET_BUILDER_AT(bld));
+    bld->at += C_DEMANGLE_NAME(DC_ASM_WriteRet)(DC_X_GET_BUILDER_AT(bld));
 
 #if 0
     { /* For debugging only. */
@@ -208,6 +210,6 @@ void DC_X_Free(struct DC_X_Context *ctx, struct DC_X_Calculation *calc){
 float DC_X_Calculate(const struct DC_X_Calculation *calc, const float *args){
     const unsigned char *const code = DC_JIT_GetPageData(calc->page->page);
     float r;
-    DC_ASM_Calculate(code + calc->start, args, &r);
+    C_DEMANGLE_NAME(DC_ASM_Calculate)(code + calc->start, args, &r);
     return r;
 }
