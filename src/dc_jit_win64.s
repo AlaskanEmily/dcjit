@@ -27,10 +27,12 @@ global DC_ASM_Function_Win64(%1)
 %define DC_ASM_FunctionImm(DC_NAME) DC_NAME %+ Imm
 
 %macro DC_ASM_SingleIntArgBody 1
-    push rdi
+    mov [rsp-8], rdi
+    push rsi
     mov rdi, rcx
     call DC_ASM_Function(%1)
-    pop rdi
+    pop rsi
+    mov rdi, [rsp-8]
     ret
 %endmacro
 
@@ -66,9 +68,6 @@ DC_ASM_SingleIntSingleShortArgFunc DC_ASM_FunctionArg(%1)
 DC_ASM_SingleIntSingleFloatArgFunc DC_ASM_FunctionImm(%1)
 %endmacro
 
-DC_ASM_FunctionDecl JMP
-DC_ASM_FunctionDecl PushArg
-DC_ASM_FunctionDecl Immediate
 DC_ASM_ArithmeticFuncDecl Add
 DC_ASM_ArithmeticFuncDecl Sub
 DC_ASM_ArithmeticFuncDecl Mul
@@ -76,8 +75,62 @@ DC_ASM_ArithmeticFuncDecl Div
 DC_ASM_ArithmeticFuncDecl Sin
 DC_ASM_ArithmeticFuncDecl Cos
 DC_ASM_ArithmeticFuncDecl Sqrt
-DC_ASM_FunctionDecl Pop
-DC_ASM_FunctionDecl Ret
+
+extern DC_ASM_WriteJMP
+global DC_ASM_WriteJMP_Win64
+DC_ASM_WriteJMP_Win64:
+    mov [rsp-8], rdi
+    push rsi
+    mov rsi, rdx
+    call DC_ASM_WriteJMP
+    pop rsi
+    mov rdi, [rsp-8]
+    ret
+
+extern DC_ASM_WritePushArg
+global DC_ASM_WritePushArg_Win64
+DC_ASM_WritePushArg_Win64:
+    mov [rsp-8], rdi
+    push rsi
+    movzx rsi, dx
+    mov rdi, rcx
+    call DC_ASM_WriteJMP
+    pop rsi
+    mov rdi, [rsp-8]
+    ret
+
+extern DC_ASM_WriteImmediate
+global DC_ASM_WriteImmediate_Win64
+DC_ASM_WriteImmediate_Win64:
+    mov [rsp-8], rdi
+    push rsi
+    mov rdi, rcx
+    movss xmm0, xmm1
+    call DC_ASM_WriteImmediate
+    pop rsi
+    mov rdi, [rsp-8]
+    ret
+
+DC_ASM_FunctionDecl JMP
+DC_ASM_FunctionDecl PushArg
+DC_ASM_FunctionDecl Immediate
+
+extern DC_ASM_WritePop
+global DC_ASM_WritePop_Win64
+DC_ASM_WritePop_Win64:
+    mov [rsp-8], rdi
+    push rsi
+    mov rdi, rcx
+    call DC_ASM_WritePop
+    pop rsi
+    mov rdi, [rsp-8]
+    ret
+
+extern DC_ASM_WriteRet
+global DC_ASM_WriteRet_Win64
+DC_ASM_WriteRet_Win64:
+    mov rdi, rcx
+    jmp DC_ASM_WriteRet
 
 extern DC_ASM_Calculate
 global DC_ASM_Calculate_Win64

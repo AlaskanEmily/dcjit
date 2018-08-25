@@ -31,7 +31,7 @@ dc_jit_x86.obj: dc_jit_x86.s
 	yasm -f win32 -Worphan-labels dc_jit_x86.s
 
 dc_jit_amd64.obj: dc_jit_amd64.s
-	yasm -f win64 -Worphan-labels dc_jit_amd64.s
+	yasm -f win64 -m amd64 -Worphan-labels dc_jit_amd64.s
 
 # This object provides calling convention conversions from the Win64 ABI to
 # the SysV ABI calling convention that dc_jit_amd64 implements.

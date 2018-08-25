@@ -21,6 +21,11 @@ unsigned DC_ASM_Write ## NAME ## Arg(void *dest,\
     const unsigned s0 = C_DEMANGLE_NAME(DC_ASM_WritePushArg)(dest, arg);\
     const unsigned s1 = C_DEMANGLE_NAME(DC_ASM_Write ## NAME)(((unsigned char *)dest)+s0);\
     return s0 + s1;\
+}\
+unsigned DC_ASM_Write ## NAME ## Imm(void *dest, float value) {\
+    const unsigned s0 = C_DEMANGLE_NAME(DC_ASM_WriteImmediate)(dest, value);\
+    const unsigned s1 = C_DEMANGLE_NAME(DC_ASM_Write ## NAME)(((unsigned char *)dest)+s0);\
+    return s0 + s1;\
 }
 
 ARG_OP(Add)
