@@ -220,6 +220,8 @@ DC_ASM_WritePop:
 
 DC_ASM_WriteRet:
     mov [rdi], BYTE 0xC3
+    mov rax, QWORD dc_asm_index
+    dec DWORD [rax]
     mov rax, 1
     ret
 
