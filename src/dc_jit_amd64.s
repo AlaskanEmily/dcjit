@@ -136,7 +136,7 @@ write_zero_imm:
 write_imm:
     mov r8d, eax
     mov [rdi+r8+4], edx
-    add edx, 8
+    add eax, 8
     ret
 
 ; unsigned DC_ASM_WriteAdd(void *dest);
@@ -226,8 +226,8 @@ DC_ASM_WriteRet:
 ; void DC_ASM_Calculate(const void *addr, const float *args, float *result);
 DC_ASM_Calculate:
     push rdx
-    lea rax,[rsp-0x10]
-    call [rdi]
+    lea rax,[rsp-24]
+    call rdi
     pop rdx
     movss [rdx], xmm0
     ret
