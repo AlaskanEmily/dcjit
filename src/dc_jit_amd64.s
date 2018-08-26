@@ -17,7 +17,11 @@
 ;
 ; Unlike x86, we start with a `lea rax,[rsp-0x8]` (actually -16, but then we
 ; `call`) to leave rax as an address to place immediates in.
-
+;
+; Any functions that need x87 (sin/cos) use different code gen if the CPU is
+; detected to be an AMD processor. This is because 32-bit fld/fstp and movss is
+; slightly slower than a cvtss2sd and 64-bit fld/fstp on AMD, but it's
+; definitely the opposite on an Intel CPU.
 
 section .text
 bits 64
