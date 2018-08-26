@@ -149,7 +149,7 @@ struct DC_X_Calculation *DC_X_FinalizeCalculation(struct DC_X_Context *ctx,
     struct DC_JIT_Page *const new_page = DC_JIT_AllocPage();
     bld->at += C_DEMANGLE_NAME(DC_ASM_WriteRet)(DC_X_GET_BUILDER_AT(bld));
 
-#if 1
+#if 0
     { /* For debugging only. */
         FILE *const log = fopen("log.bin", "wb");
         fwrite(DC_X_GET_BUILDER_BYTES(bld), 1, bld->at, log);

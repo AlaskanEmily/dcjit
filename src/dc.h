@@ -10,6 +10,17 @@
 /*
  * The public API for the libdcjit library.
  */
+#if defined _WIN32 && !defined __CYGWIN__
+    #ifdef DCJIT_INTERNAL
+        #define DC_API __declspec(dllimport) __stdcall
+    #else
+        #define DC_API __declspec(dllexport) __stdcall
+    #endif
+#elif defined __CYGWIN__
+    #define DC_API __attribute__((stdcall))
+#else
+    #define DC_API
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,23 +30,18 @@ extern "C" {
  * @brief Context to create and run calculations.
  */
 struct DC_Context;
+typedef struct DC_Context *DC_ContextPtr;
 
 /**
  * @brief A calculation that has been compiled and can be run.
  */
 struct DC_Calculation;
-
-/**
- * @brief A calculation that has been compiled, but not made executable yet.
- *
- * @sa DC_CompileCalculation
- */
-struct DC_CalculationBuilder;
+typedef struct DC_Calculation *DC_CalculationPtr;
 
 /**
  * @brief Creates a context.
  */
-struct DC_Context *DC_CreateContext(void);
+DC_ContextPtr DC_API DC_CreateContext(void);
 
 /**
  * @brief Frees a context.
@@ -43,7 +49,7 @@ struct DC_Context *DC_CreateContext(void);
  * All calculations created in this context must be freed with DC_Free
  * before the context is freed.
  */
-void DC_FreeContext(struct DC_Context *ctx);
+void DC_API DC_FreeContext(struct DC_Context *ctx);
 
 #define DC_COMPILE_KEEP_GOING 1
 
@@ -83,7 +89,7 @@ void DC_FreeContext(struct DC_Context *ctx);
  * @param out_error Receives an error if the compilation fails
  * @return new calculation, or NULL if an error has occured
  */
-struct DC_Calculation *DC_Compile(struct DC_Context *ctx,
+DC_CalculationPtr DC_API DC_Compile(struct DC_Context *ctx,
     const char *source,
     unsigned num_args,
     const char *const *arg_names,
@@ -116,7 +122,7 @@ struct DC_Calculation *DC_Compile(struct DC_Context *ctx,
  *   DC_COMPILE_KEEP_GOING, then this is indicates the first calculation that
  *   had an error.
  */
-int DC_CompileCalculations(struct DC_Context *ctx,
+int DC_API DC_CompileCalculations(struct DC_Context *ctx,
     int flags,
     unsigned num_calculations,
     const char *const *sources,
@@ -128,17 +134,17 @@ int DC_CompileCalculations(struct DC_Context *ctx,
 /**
  * @brief Frees the out_error from DC_Compile
  */
-void DC_FreeError(const char *error);
+void DC_API DC_FreeError(const char *error);
 
 /**
  * @brief Frees a calculation
  */
-void DC_Free(struct DC_Context *ctx, struct DC_Calculation *);
+void DC_API DC_Free(struct DC_Context *ctx, struct DC_Calculation *);
 
 /**
  * @brief Runs a calculation.
  */
-float DC_Calculate(const struct DC_Calculation *, const float *args);
+float DC_API DC_Calculate(const struct DC_Calculation *, const float *args);
 
 #ifdef __cplusplus
 } // extern "C"
