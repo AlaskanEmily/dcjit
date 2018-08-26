@@ -68,13 +68,20 @@ DC_ASM_SingleIntSingleShortArgFunc DC_ASM_FunctionArg(%1)
 DC_ASM_SingleIntSingleFloatArgFunc DC_ASM_FunctionImm(%1)
 %endmacro
 
+%macro DC_ASM_TrigFuncDecl 1
+DC_ASM_FunctionDecl %1
+DC_ASM_FunctionDecl DC_ASM_FunctionArg(%1)
+DC_ASM_SingleIntArgFunc %1
+DC_ASM_SingleIntSingleShortArgFunc DC_ASM_FunctionArg(%1)
+%endmacro
+
 DC_ASM_ArithmeticFuncDecl Add
 DC_ASM_ArithmeticFuncDecl Sub
 DC_ASM_ArithmeticFuncDecl Mul
 DC_ASM_ArithmeticFuncDecl Div
-DC_ASM_ArithmeticFuncDecl Sin
-DC_ASM_ArithmeticFuncDecl Cos
-DC_ASM_ArithmeticFuncDecl Sqrt
+DC_ASM_TrigFuncDecl Sin
+DC_ASM_TrigFuncDecl Cos
+DC_ASM_TrigFuncDecl Sqrt
 
 extern DC_ASM_WriteJMP
 global DC_ASM_WriteJMP_Win64
