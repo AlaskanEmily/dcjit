@@ -120,14 +120,14 @@ DC_ASM_WritePushArg:
     mov r8d, [rax]
     inc DWORD [rax]
     lea rax, [(r8 * 8) + 0xF30F1006]
-    shl rsi, 2
+    shl si, 2
     jz push_zero_arg
     
     add eax, 0x40
     bswap eax
     mov [rdi], eax
     mov ax, si
-    mov [rdx+4], al
+    mov [rdi+4], al
     mov rax, 5
     ret
 

@@ -23,14 +23,14 @@ global DC_ASM_FunctionWin64(%1)
 %endmacro
 
 %macro DC_ASM_SingleIntArgBody 1
-    ;mov [rsp+16], rdi
+    sub rsp, 8
     push rsi
     push rdi
     mov rdi, rcx
     call %1
     pop rdi
     pop rsi
-    ;mov rdi, [rsp+16]
+    add rsp, 8
     ret
 %endmacro
 
@@ -50,8 +50,7 @@ DC_ASM_FunctionWin64(%1):
 %macro DC_ASM_SingleIntSingleShortArgFunc 1
 DC_ASM_FunctionWrapper %1
 DC_ASM_FunctionWin64(%1):
-;    mov [rsp+16], rdi
-    push r12
+    sub rsp, 8
     push rdi
     push rsi
     mov rdi, rcx
@@ -59,21 +58,22 @@ DC_ASM_FunctionWin64(%1):
     call %1
     pop rsi
     pop rdi
-    pop r12
-;    mov rdi, [rsp+16]
+    add rsp, 8
     ret
 %endmacro
 
 %macro DC_ASM_SingleIntSinglePointerArgFunc 1
 DC_ASM_FunctionWrapper %1
 DC_ASM_FunctionWin64(%1):
-    mov [rsp+16], rdi
+    sub rsp, 8
     push rsi
+    push rdi
     mov rdi, rcx
     mov rsi, rdx
     call %1
+    pop rdi
     pop rsi
-    mov rdi, [rsp+16]
+    add rsp, 8
     ret
 %endmacro
 
@@ -110,13 +110,15 @@ DC_ASM_SingleIntSingleFloatArgFunc DC_ASM_WriteDivImm
 extern DC_ASM_Calculate
 global DC_ASM_Calculate_Win64
 DC_ASM_Calculate_Win64:
-    mov [rsp+16], rdi
+    sub rsp, 8
     push rsi
+    push rdi
     mov rdi, rcx
     mov rsi, rdx
     mov rdx, r8
     call DC_ASM_Calculate
+    pop rdi
     pop rsi
-    mov rdi, [rsp+16]
+    add rsp, 8
     ret
 
