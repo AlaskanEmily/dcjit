@@ -99,21 +99,21 @@ int main(int argc, char **argv){
         buffer[at] = 0;
         
         if(at != 0){
-            struct DC_Calculation *const calc =
-                DC_Compile(ctx, buffer, num_args, (const char*const *)argument_names);
+            const char *err = NULL;
+            struct DC_Calculation *const calc = DC_Compile(ctx,
+                    buffer,
+                    num_args,
+                    (const char*const *)argument_names,
+                    &err);
             if(calc == NULL){
-                fputs("Could not create calculation.\n", stderr);
-                continue;
+                if(err != NULL)
+                    fprintf(stderr, "Calculation error: %s\n", err);
+                else
+                    fputs("Calculation error: <NULL>\n", stderr);
             }
             else{
-                const char *const err = DC_GetError(calc);
-                if(err != NULL){
-                    fprintf(stderr, "Calculation error: %s\n", err);
-                }
-                else{
-                    const float result = DC_Calculate(calc, argument_values);
-                    printf("%s = %f\n", buffer, result);
-                }
+                const float result = DC_Calculate(calc, argument_values);
+                printf("%s = %f\n", buffer, result);
                 DC_Free(ctx, calc);
             }
         }

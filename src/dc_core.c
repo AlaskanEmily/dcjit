@@ -8,6 +8,7 @@
 #include "dc_backend.h"
 
 /* needed for strncpy on some systems */
+#define _DEFAULT_SOURCE
 #define _BSD_SOURCE
 
 /* Used for snprintf */
@@ -27,7 +28,6 @@
 #ifndef DC_OPTIMIZE_INTRINSIC
 #define DC_OPTIMIZE_INTRINSIC DC_OPTIMIZE
 #endif
-
 
 #ifdef _MSC_VER
     #define DC_STRNCPY(DST, LEN, TXT) strncpy_s((DST), (LEN),  (TXT), _TRUNCATE)
@@ -94,7 +94,7 @@ static const struct ParseOperation dc_add_ops[DC_NUM_ADD_OPS] = {
 };
 
 typedef double(*unary_operation)(double);
-typedef enum TermResultType(*parser_callback)(struct DC_Context *ctx,
+typedef enum TermResultType(*parser_callback)(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
@@ -102,24 +102,12 @@ typedef enum TermResultType(*parser_callback)(struct DC_Context *ctx,
     const char *const *arg_names,
     union TermType *out_term);
 
-struct DC_Context{
-    struct DC_X_Context *ctx;
-};
-
-struct DC_Calculation{
-    struct DC_X_Calculation *calc;
-    char error[0x100];
-};
-
 struct DC_Context *DC_CreateContext(void){
-    struct DC_Context *const ctx = malloc(sizeof(struct DC_Context *));
-    ctx->ctx = DC_X_CreateContext();
-    return ctx;
+    return (struct DC_Context *)DC_X_CreateContext();
 }
 
 void DC_FreeContext(struct DC_Context *ctx){
-    DC_X_FreeContext(ctx->ctx);
-    free(ctx);
+    DC_X_FreeContext((struct DC_X_Context *)ctx);
 }
 
 /* Skips whitespace. */
@@ -211,7 +199,7 @@ union TermResult {
 };
 
 /* This is the general entry point to parse an expression */
-static enum TermResultType parse_add_ops(struct DC_Context *ctx,
+static enum TermResultType parse_add_ops(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
@@ -311,7 +299,7 @@ static enum TermResultType parse_value(const char **source_ptr,
     }
 }
 
-static enum TermResultType parse_parens(struct DC_Context *ctx,
+static enum TermResultType parse_parens(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
@@ -346,7 +334,7 @@ static enum TermResultType parse_parens(struct DC_Context *ctx,
 
 /* Parses a builtin, which is a parenthesized expression and a unary operation
  * to perform on that operation or to push to the JIT. */
-static enum TermResultType builtin(struct DC_Context *ctx,
+static enum TermResultType builtin(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
@@ -368,25 +356,25 @@ static enum TermResultType builtin(struct DC_Context *ctx,
             out_term->immediate = immediate_operation(out_term->immediate);
         }
         else{
-            DC_X_BuildPushImmediate(ctx->ctx, bld, (float)out_term->immediate);
-            operation(ctx->ctx, bld);
+            DC_X_BuildPushImmediate(ctx, bld, (float)out_term->immediate);
+            operation(ctx, bld);
             return eTermPushed;
         }
     }
     else if(type == eTermArgument){
-        DC_X_BuildPushArg(ctx->ctx, bld, out_term->argument);
-        operation(ctx->ctx, bld);
+        DC_X_BuildPushArg(ctx, bld, out_term->argument);
+        operation(ctx, bld);
         return eTermPushed;
     }
     else if(type == eTermPushed){
-        operation(ctx->ctx, bld);
+        operation(ctx, bld);
     }
     return type;
 }   
 
 /* Parses a term, which can be a value, a parenthesized expression, or a
  * builtin operation */
-static enum TermResultType parse_term(struct DC_Context *ctx,
+static enum TermResultType parse_term(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
@@ -450,7 +438,7 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
                 out_term->immediate = result.term.immediate;
             }
             else{
-                DC_X_BuildPushImmediate(ctx->ctx, bld, (float)result.term.immediate);
+                DC_X_BuildPushImmediate(ctx, bld, (float)result.term.immediate);
                 type = eTermPushed;
             }
             break;
@@ -459,7 +447,7 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
                 out_term->argument = result.term.argument;
             }
             else{
-                DC_X_BuildPushArg(ctx->ctx, bld, result.term.argument);
+                DC_X_BuildPushArg(ctx, bld, result.term.argument);
                 type = eTermPushed;
             }
             break;
@@ -469,7 +457,7 @@ static enum TermResultType parse_term(struct DC_Context *ctx,
     return type;
 }
 
-static enum TermResultType parse_generic(struct DC_Context *ctx,
+static enum TermResultType parse_generic(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
@@ -512,13 +500,13 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
                                     term.immediate, next_term.immediate);
                             }
                             else{
+                                const float imm = (float)next_term.immediate;
                                 /* Flush the first argument */
                                 if(type == eTermArgument){
                                     /* TODO: We /might/ be able to label
                                      * operators that are transitive and
                                      * re-order the arguments here. */
-                                    DC_X_BuildPushArg(ctx->ctx,
-                                        bld, term.argument);
+                                    DC_X_BuildPushArg(ctx, bld, term.argument);
                                     type = eTermPushed;
                                 }
                                 /* else the arg was pushed. */
@@ -526,38 +514,34 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
                                 /* TODO: We could parse the next term and then
                                  * flush? */
                                 if(DC_OPTIMIZE_FETCH){
-                                    operations[i].build_imm_op(ctx->ctx, bld,
-                                        (float)next_term.immediate);
+                                    operations[i].build_imm_op(ctx, bld, imm);
                                 }
                                 else{
-                                    DC_X_BuildPushImmediate(ctx->ctx,
-                                        bld, (float)next_term.immediate);
-                                    operations[i].build_op(ctx->ctx, bld);
+                                    DC_X_BuildPushImmediate(ctx, bld, imm);
+                                    operations[i].build_op(ctx, bld);
                                 }
                             }
                             break;
                         }
                         else if(next_type == eTermArgument){
+                            const unsigned short arg = next_term.argument;
                             /* Flush the first argument */
                             if(type == eTermImmediate){
-                                DC_X_BuildPushImmediate(ctx->ctx,
-                                    bld, (float)term.immediate);
+                                const float imm = (float)term.immediate;
+                                DC_X_BuildPushImmediate(ctx, bld, imm);
                                 type = eTermPushed;
                             }
                             else if(type == eTermArgument){
-                                DC_X_BuildPushArg(ctx->ctx,
-                                    bld, term.argument);
+                                DC_X_BuildPushArg(ctx, bld, term.argument);
                                 type = eTermPushed;
                             }
                             
                             if(DC_OPTIMIZE_FETCH){
-                                operations[i].build_arg_op(ctx->ctx, bld,
-                                    next_term.argument);
+                                operations[i].build_arg_op(ctx, bld, arg);
                             }
                             else{
-                                DC_X_BuildPushArg(ctx->ctx,
-                                    bld, next_term.argument);
-                                operations[i].build_op(ctx->ctx, bld);
+                                DC_X_BuildPushArg(ctx, bld, arg);
+                                operations[i].build_op(ctx, bld);
                             }
                             break;
                         }
@@ -565,16 +549,15 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
                             /* TODO: This seems like it's incorrect? */
                             /* Flush the first argument */
                             if(type == eTermImmediate){
-                                DC_X_BuildPushImmediate(ctx->ctx,
-                                    bld, (float)term.immediate);
+                                const float imm = (float)term.immediate;
+                                DC_X_BuildPushImmediate(ctx, bld, imm);
                                 type = eTermPushed;
                             }
                             else if(type == eTermArgument){
-                                DC_X_BuildPushArg(ctx->ctx,
-                                    bld, term.argument);
+                                DC_X_BuildPushArg(ctx, bld, term.argument);
                                 type = eTermPushed;
                             }
-                            operations[i].build_op(ctx->ctx, bld);
+                            operations[i].build_op(ctx, bld);
                             break;
                         }
                         else{
@@ -606,7 +589,7 @@ static enum TermResultType parse_generic(struct DC_Context *ctx,
 }
 
 /* Implements parsing terms separated by `/' and `*' */
-static enum TermResultType parse_mul_ops(struct DC_Context *ctx,
+static enum TermResultType parse_mul_ops(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
@@ -628,7 +611,7 @@ static enum TermResultType parse_mul_ops(struct DC_Context *ctx,
 
 /* Implements parsing terms separated by `+' and `-', calling into
  * parse_mul_ops for each term. */
-static enum TermResultType parse_add_ops(struct DC_Context *ctx,
+static enum TermResultType parse_add_ops(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
     const char **source_ptr,
@@ -648,58 +631,62 @@ static enum TermResultType parse_add_ops(struct DC_Context *ctx,
         DC_NUM_ADD_OPS);
 }
 
-struct DC_Calculation *DC_Compile(struct DC_Context *ctx,
+struct DC_Calculation *DC_Compile(struct DC_Context *dc_ctx,
     const char *source,
     unsigned num_args,
-    const char *const *arg_names){
+    const char *const *arg_names,
+    const char **out_error){
     
-    struct DC_Calculation *const calc = malloc(sizeof(struct DC_Calculation));
+    struct DC_X_Context *const ctx = (struct DC_X_Context *)dc_ctx;
+    char error_msg[0x100];
     struct DC_X_CalculationBuilder *const bld =
-        DC_X_CreateCalculationBuilder(ctx->ctx);
-    
+        DC_X_CreateCalculationBuilder(ctx);
     union TermType term;
-    calc->calc = NULL;
+    
     source = skip_whitespace(source);
     
     switch(parse_add_ops(ctx,
         bld,
-        calc->error,
+        error_msg,
         &source,
         num_args,
         arg_names,
         &term)){
             case eTermImmediate:
-                DC_X_BuildPushImmediate(ctx->ctx, bld, (float)term.immediate);
-                calc->error[0] = 0;
-                calc->calc = DC_X_FinalizeCalculation(ctx->ctx, bld);
-                return calc;
+                DC_X_BuildPushImmediate(ctx, bld, (float)term.immediate);
+                return (struct DC_Calculation *)DC_X_FinalizeCalculation(ctx,
+                    bld);
             case eTermArgument:
-                DC_X_BuildPushArg(ctx->ctx, bld, term.argument);
+                DC_X_BuildPushArg(ctx, bld, term.argument);
                 /* FALLTHROUGH */
             case eTermPushed:
-                calc->error[0] = 0;
-                calc->calc = DC_X_FinalizeCalculation(ctx->ctx, bld);
+                    out_error[0] = NULL;
+                return (struct DC_Calculation *)DC_X_FinalizeCalculation(ctx,
+                    bld);
                 /* FALLTHROUGH */
             default:
-                return calc;
+                {
+                    const unsigned error_len =
+                        (unsigned)strnlen(error_msg, 0x100);
+                    char *const error_txt = malloc(error_len+1);
+                    out_error[0] = memcpy(error_txt, error_msg, error_len);
+                    error_txt[error_len] = '\0';
+                }
+                return NULL;
     }
     fputs("INTERNAL ERROR\n", stderr);
     abort();
     return 0;
 }
 
-void DC_Free(struct DC_Context *ctx, struct DC_Calculation *calc){
-    if(calc->calc != NULL)
-        DC_X_Free(ctx->ctx, calc->calc);
+void DC_FreeError(const char *error){
+    free((void*)error);
 }
 
-const char *DC_GetError(const struct DC_Calculation *calc){
-    if(calc->error[0])
-        return calc->error;
-    else
-        return NULL;
+void DC_Free(struct DC_Context *ctx, struct DC_Calculation *calc){
+    DC_X_Free((struct DC_X_Context *)ctx, (struct DC_X_Calculation*)calc);
 }
 
 float DC_Calculate(const struct DC_Calculation *calc, const float *args){
-    return DC_X_Calculate(calc->calc, args);
+    return DC_X_Calculate((const struct DC_X_Calculation *)calc, args);
 }
