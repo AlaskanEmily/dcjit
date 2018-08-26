@@ -4,6 +4,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+/* This file contains the DC language parser. It calls the DC_X functions to
+ * actually compile the code (or write the AST if the interpreter backend is
+ * being used).
+ */
+
 #include "dc.h"
 #include "dc_backend.h"
 
@@ -40,7 +45,44 @@
     }while(0)
 #endif
 
-/* General parsing components. */
+/*
+ * Parsing overview:
+ *
+ * DCJIT uses a fairly basic recursive descent parser. The ParseOperation
+ * struct defines operators, and the language has two levels of operator
+ * precedence. These are defined by parse_mul_ops and parse_add_ops, which use
+ * the parse_generic function and specific data for the operators.
+ *
+ * All values encountered (parsed in parse_term) are considered "pushed",
+ * "arguments", or "immediates".
+ *
+ * Pushed values have already had code generated that pushes the value onto the
+ * stack.
+ *
+ * Argument values are indicated using their index into the argument list that
+ * will be passed when the calculation is run. These will usually have to be
+ * pushed, or used with an operator callback that can accept an argument index.
+ *
+ * Immediate values are constant expression values. These are propogated
+ * upwards in the parser, and using callbacks on the ParseOperation all
+ * subexpressions that consist solely of constant values are fully calculated
+ * at runtime.
+ *
+ * TODO: Adding transitive properties (a+b+c = a+c+b) and identity values
+ * (a = a+0, a = a*1.0) could allow even more aggressive constant expression
+ * evaluation.
+ *
+ * How values are actually written for each operation is implemented in
+ * parse_generic. Much of the code exists to handle the different value types,
+ * which is mostly there for optimization.
+ *
+ * There are some terms which are "builtins". These consist of a function name
+ * and a subexpression, such as "sin(<expression)". They are parsed as a single
+ * term, and if possible an immediate result is returned. Otherwise, this will
+ * result in a pushed value.
+ */
+
+/* This is the type of result of parse_term. */
 enum TermResultType {
     eTermImmediate,
     eTermArgument,
@@ -50,49 +92,84 @@ enum TermResultType {
     eTermInvalidArgName
 };
 
+/* The output of parse_term. The active member (if any) is indicated by the
+ * type, in a TermResultType
+ */
 union TermType {
     double immediate;
     unsigned short argument;
 };
 
+/* Typedef for operations to calculate immediate results. */
 typedef double(*arithmetic_operation)(double, double);
+
+/* The build_push_* functions are the callbacks to perform codegen for an
+ * arithmetic/trig operation.
+ */
+
+/* Typedef for operations to calculate results on fully pushed values. */
 typedef void (*build_push_operation)(struct DC_X_Context*,
     struct DC_X_CalculationBuilder*);
+/* Typedef for operations to calculate results with one pushed value and one
+ * argument. */
 typedef void (*build_push_arg_operation)(struct DC_X_Context*,
     struct DC_X_CalculationBuilder*,
     unsigned short);
+/* Typedef for operations to calculate results with one pushed value and one
+ * immediate value. Note that if both values are immediate, the
+ * arithmetic_operation callback is used and the immediate result is propagated
+ * upward through the parser. */
 typedef void (*build_push_imm_operation)(struct DC_X_Context*,
     struct DC_X_CalculationBuilder*,
     float);
 
+/* Immediate operation to add. */
 static double arithmetic_operation_add(double a, double b) { return a + b; }
+/* Immediate operation to subtract. */
 static double arithmetic_operation_sub(double a, double b) { return a - b; }
+/* Immediate operation to multiply. */
 static double arithmetic_operation_mul(double a, double b) { return a * b; }
+/* Immediate operation to divide. */
 static double arithmetic_operation_div(double a, double b) { return a / b; }
+/* Immediate operation to calculate sine. */
 static double arithmetic_operation_sin(double a){ return sin(a); }
+/* Immediate operation to calculate cosine. */
 static double arithmetic_operation_cos(double a){ return cos(a); }
+/* Immediate operation to calculate square root. */
 static double arithmetic_operation_sqrt(double a){ return sqrt(a); }
 
+/* Defines an operator in the language. */
 struct ParseOperation {
-    char operator_char;
+    char operator_char; /* Operator character. */
+    /* Callback for this operator with two immediate values. */
     arithmetic_operation immediate_op;
+    /* Callback for this operator with two pushed values. */
     build_push_operation build_op;
+    /* Callback for this operator with one pushed value and one argument. */
     build_push_arg_operation build_arg_op;
     build_push_imm_operation build_imm_op;
 };
 
+#define DC_BUILD_OPS(NAME)\
+    DC_X_Build ## NAME, DC_X_Build ## NAME ## Arg, DC_X_Build ## NAME ## Imm
+
+/* ParseOperation data for mul_ops 
+ * TODO: Remainder will go here.
+ */
 #define DC_NUM_MUL_OPS 2
 static const struct ParseOperation dc_mul_ops[DC_NUM_MUL_OPS] = {
-    {'*', arithmetic_operation_mul, DC_X_BuildMul, DC_X_BuildMulArg, DC_X_BuildMulImm},
-    {'/', arithmetic_operation_div, DC_X_BuildDiv, DC_X_BuildDivArg, DC_X_BuildDivImm}
+    {'*', arithmetic_operation_mul, DC_BUILD_OPS(Mul)},
+    {'/', arithmetic_operation_div, DC_BUILD_OPS(Div)}
 };
 
+/* ParseOperation data for add_ops */
 #define DC_NUM_ADD_OPS 2
 static const struct ParseOperation dc_add_ops[DC_NUM_ADD_OPS] = {
-    {'+', arithmetic_operation_add, DC_X_BuildAdd, DC_X_BuildAddArg, DC_X_BuildAddImm},
-    {'-', arithmetic_operation_sub, DC_X_BuildSub, DC_X_BuildSubArg, DC_X_BuildSubImm}
+    {'+', arithmetic_operation_add, DC_BUILD_OPS(Add)},
+    {'-', arithmetic_operation_sub, DC_BUILD_OPS(Sub)}
 };
 
+/* Unary operation typedef. This is only used in the "builtin" terms. */
 typedef double(*unary_operation)(double);
 typedef enum TermResultType(*parser_callback)(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
@@ -124,7 +201,10 @@ skip_whitespace_next_char:
     return source;
 }
 
-/* Parses an integer. */
+/* Parses an integer.
+ * 
+ * This is used for argument numbers, and to parse the whole and decimal parts
+ * individually of floating point numbers. */
 static unsigned long parse_integer(const char **const source_ptr){
     unsigned long val = 0;
     const char *source = *source_ptr;
@@ -153,7 +233,7 @@ parse_done:
     return val;
 }
 
-/* Parses a double. */
+/* Parses a double-precision floating point number. */
 static double parse_double(const char **const source_ptr){
     int negate = 0;
     const char *source = *source_ptr;
@@ -207,7 +287,11 @@ static enum TermResultType parse_add_ops(struct DC_X_Context *ctx,
     const char *const *arg_names,
     union TermType *out_term);
 
-/* Parses a value. This can be a literal, or an argument name or number. */
+/* Parses a value. This can be a literal, or an argument name or number.
+ * Does not use the same data format as the other parsing functions, as the
+ * caller will need to make decisions about what to with the result depending
+ * on the operation.
+ */
 static enum TermResultType parse_value(const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
@@ -299,6 +383,9 @@ static enum TermResultType parse_value(const char **source_ptr,
     }
 }
 
+/* Parses a parenthesized expression. This will use the parse_add_ops function
+ * to parse the inner statement.
+ */
 static enum TermResultType parse_parens(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
     char error_text[0x100],
