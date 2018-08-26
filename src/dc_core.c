@@ -324,7 +324,7 @@ static enum TermResultType parse_value(const char **source_ptr,
             source++;
             {
                 const unsigned long arg_num = parse_integer(&source);
-                if(arg_num < 0x10000 && arg_num <= num_args)
+                if(arg_num < 0x10000 && arg_num < num_args)
                     return DC_TERM_SUCCESS_ARG((unsigned short)arg_num);
                 else
                     return DC_TERM_FAIL_INTEGER(eTermInvalidArgNumber, arg_num);
@@ -499,11 +499,15 @@ static enum TermResultType parse_term(struct DC_X_Context *ctx,
         case eTermSyntaxError:
             break;
         case eTermInvalidArgNumber:
-            snprintf(error_text,
-                0x100,
-                "Arg %li is over the maximum of %u",
-                result.int_error,
-                num_args);
+            if(num_args == 0)
+                snprintf(error_text, 0x100,
+                    "Arg %li is over the maximum of none", result.int_error);
+            else
+                snprintf(error_text,
+                    0x100,
+                    "Arg %li is over the maximum of %u",
+                    result.int_error,
+                    num_args-1);
             break;
         case eTermInvalidArgName:
         {
@@ -664,7 +668,7 @@ static enum TermResultType parse_generic(struct DC_X_Context *ctx,
                 out_term->immediate = term.immediate;
             }
             else if(type == eTermArgument){
-                out_term->immediate = term.argument;
+                out_term->argument = term.argument;
             }
             return type;
         default:
@@ -741,6 +745,7 @@ struct DC_Calculation *DC_Compile(struct DC_Context *dc_ctx,
         &term)){
             case eTermImmediate:
                 DC_X_BuildPushImmediate(ctx, bld, (float)term.immediate);
+                out_error[0] = NULL;
                 return (struct DC_Calculation *)DC_X_FinalizeCalculation(ctx,
                     bld);
             case eTermArgument:
