@@ -3,7 +3,7 @@
 
 all: dc.exe
 
-CLFLAGS=/nologo /W3 /EHsc /Zi /MT
+CLFLAGS=/nologo /W3 /EHsc /Zi /MT /O2
 CL=cl
 LINK=link
 LINKFLAGS=/NOLOGO /DEBUG 

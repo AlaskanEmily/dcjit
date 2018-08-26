@@ -157,23 +157,21 @@ DC_ASM_WriteImmediate:
     bswap edx
     
     ; Get the immediate
-    push r8
-    movss [rsp], xmm0
-    mov eax, [rsp]
-    pop r8
+    lea rax, [rsp-8]
+    movss [rax], xmm0
+    mov eax, [rax]
     cmp eax, 0
-    jz write_zero_imm
+    je write_zero_imm
     mov [rdi], WORD 0x00C7
     mov [rdi+2], eax
-    mov eax, 2
+    mov rax, 6
     jmp write_imm
 write_zero_imm:
     mov [rdi], DWORD 0x3889FF31 ; xor edi, edi / mov [rax], edi
-    xor eax, eax
+    mov rax, 4
 write_imm:
-    mov r8d, eax
-    mov [rdi+r8+4], edx
-    add eax, 8
+    mov [rdi+rax], edx
+    add rax, 4
     ret
 
 ; unsigned DC_ASM_WriteAdd(void *dest);
