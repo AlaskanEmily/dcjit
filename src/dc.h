@@ -11,15 +11,21 @@
  * The public API for the libdcjit library.
  */
 #if defined _WIN32 && !defined __CYGWIN__
+    #define DC_API_CALL __stdcall
     #ifdef DCJIT_INTERNAL
-        #define DC_API __declspec(dllimport) __stdcall
+        #define DC_API __declspec(dllexport) DC_API_CALL
     #else
-        #define DC_API __declspec(dllexport) __stdcall
+        #define DC_API __declspec(dllimport) DC_API_CALL
     #endif
 #elif defined __CYGWIN__
-    #define DC_API __attribute__((stdcall))
+    #define DC_API_CALL __attribute__((stdcall))
+    #define DC_API DC_API_CALL
+#elif defined __EMSCRIPTEN__
+    #define DC_API_CALL
+    #define DC_API __attribute__((used)) DC_API_CALL
 #else
-    #define DC_API
+    #define DC_API_CALL
+    #define DC_API DC_API_CALL
 #endif
 
 #ifdef __cplusplus

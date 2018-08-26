@@ -179,11 +179,11 @@ typedef enum TermResultType(*parser_callback)(struct DC_X_Context *ctx,
     const char *const *arg_names,
     union TermType *out_term);
 
-struct DC_Context *DC_CreateContext(void){
+DC_ContextPtr DC_API_CALL DC_CreateContext(void){
     return (struct DC_Context *)DC_X_CreateContext();
 }
 
-void DC_FreeContext(struct DC_Context *ctx){
+void DC_API_CALL DC_FreeContext(struct DC_Context *ctx){
     DC_X_FreeContext((struct DC_X_Context *)ctx);
 }
 
@@ -722,7 +722,7 @@ static enum TermResultType parse_add_ops(struct DC_X_Context *ctx,
         DC_NUM_ADD_OPS);
 }
 
-struct DC_Calculation *DC_Compile(struct DC_Context *dc_ctx,
+DC_CalculationPtr DC_API_CALL DC_Compile(struct DC_Context *dc_ctx,
     const char *source,
     unsigned num_args,
     const char *const *arg_names,
@@ -771,7 +771,7 @@ struct DC_Calculation *DC_Compile(struct DC_Context *dc_ctx,
     return 0;
 }
 
-int DC_CompileCalculations(struct DC_Context *dc_ctx,
+int DC_API_CALL DC_CompileCalculations(struct DC_Context *dc_ctx,
     int flags,
     unsigned num_calculations,
     const char *const *sources,
@@ -830,14 +830,14 @@ int DC_CompileCalculations(struct DC_Context *dc_ctx,
 }
 
 
-void DC_FreeError(const char *error){
+void DC_API_CALL DC_FreeError(const char *error){
     free((void*)error);
 }
 
-void DC_Free(struct DC_Context *ctx, struct DC_Calculation *calc){
+void DC_API_CALL DC_Free(struct DC_Context *ctx, struct DC_Calculation *calc){
     DC_X_Free((struct DC_X_Context *)ctx, (struct DC_X_Calculation*)calc);
 }
 
-float DC_Calculate(const struct DC_Calculation *calc, const float *args){
+float DC_API_CALL DC_Calculate(const struct DC_Calculation *calc, const float *args){
     return DC_X_Calculate((const struct DC_X_Calculation *)calc, args);
 }

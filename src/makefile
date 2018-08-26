@@ -8,14 +8,15 @@ all: dc$(EXT) dc$(SO)
 
 SYSFLAGS?=-g
 SYSFLAGS+=-fPIC
-LINKFLAGS=$(SYSFLAGS)
+LINKFLAGS?=
+LINKFLAGS+=$(SYSFLAGS)
 CCFLAGS=-Wall -Wextra -pedantic -Werror -Os $(SYSFLAGS)
 CFLAGS=$(CCFLAGS) -ansi -Wenum-compare -Wshadow
 CXXFLAGS=$(CCFLAGS) -std=c++98 -fno-rtti -fno-exceptions
 
 CC?=gcc
 CXX?=g++
-AR?=emar
+AR?=ar
 RANLIB?=ranlib
 
 ARCH?=x86

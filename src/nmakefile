@@ -3,7 +3,7 @@
 
 all: dc.exe dcjit.dll
 
-CLFLAGS=/nologo /W3 /EHsc /Zi /MT /O2
+CLFLAGS=/nologo /W3 /EHsc /Zi /MT /O2 /DDCJIT_INTERNAL
 CL=cl
 LINK=link
 LINKFLAGS=/NOLOGO /DEBUG 

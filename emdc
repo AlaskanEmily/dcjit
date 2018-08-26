@@ -1,4 +1,7 @@
 #!/bin/sh
 # Any copyright is dedicated to the Public Domain.
 # http://creativecommons.org/publicdomain/zero/1.0/
-emmake make -C src BACKEND=js EXT=.js SO=lib.js SYSFLAGS=-s\ WASM=0 emscripten
+
+# Builds the emscripten configuration of DC
+
+emmake make -C src BACKEND=js EXT=.js SO=lib.js LINKFLAGS=-s\ WASM=0\ --pre-js\ dc_jit_js.js emscripten
