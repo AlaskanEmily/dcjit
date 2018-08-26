@@ -747,7 +747,7 @@ struct DC_Calculation *DC_Compile(struct DC_Context *dc_ctx,
                 DC_X_BuildPushArg(ctx, bld, term.argument);
                 /* FALLTHROUGH */
             case eTermPushed:
-                    out_error[0] = NULL;
+                out_error[0] = NULL;
                 return (struct DC_Calculation *)DC_X_FinalizeCalculation(ctx,
                     bld);
                 /* FALLTHROUGH */

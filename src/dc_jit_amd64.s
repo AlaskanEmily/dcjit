@@ -122,6 +122,7 @@ DC_ASM_WritePushArg:
     lea rax, [(r8 * 8) + 0xF30F1006]
     shl rsi, 2
     jz push_zero_arg
+    
     add eax, 0x40
     bswap eax
     mov [rdi], eax
@@ -151,9 +152,9 @@ DC_ASM_WriteImmediate:
 
     ; Get the XMM code
     mov rax, QWORD dc_asm_index
-    mov r8d, [rax]
+    mov ecx, [rax]
     inc DWORD [rax]
-    lea edx, [(r8 * 3) + 0xF30F1000]
+    lea edx, [(ecx * 8) + 0xF30F1000]
     bswap edx
     
     ; Get the immediate
@@ -273,11 +274,11 @@ DC_ASM_WriteMulArg:
 
 dc_asm_write_arg_arithmetic:
     mov rax, QWORD dc_asm_index
-    mov r8d, [rax]
-    lea rax, [(r8d * 8) + ecx + 6]
+    mov edx, [rax]
+    lea eax, [(edx * 8) + ecx + 6]
     
     ; TODO: Something up with that calculation above?
-    ;or ecx, eax
+    or cx, ax
     
     shl si, 2
     jz dc_asm_write_zero_arg_arithmetic
@@ -316,10 +317,8 @@ dc_asm_write_trig_arg:
     
     ; Grab the current index into r8 right now.
     mov rax, QWORD dc_asm_index
+    inc DWORD [rax]
     mov r8d, [rax]
-    inc r8
-    mov [rax], r8d
-    dec r8
     
     ; ecx has the last 4 letters of the vendor string. Compare against the AMD
     ; code.
@@ -372,19 +371,21 @@ DC_ASM_WriteMulImm:
 
 dc_asm_write_arg_immediate:
     ; Write mov [rax], IMM
-    mov [rdi], WORD 0x00C7
     
     ; Get the immediate
     lea rax, [rsp-8]
     movss [rax], xmm0
     mov edx, [rax]
+    
+    mov [rdi], WORD 0x00C7
     mov [rdi+2], edx
-
+    
     ; Get the XMM register.
     mov rax, QWORD dc_asm_index
     mov edx, [rax]
-    shl edx, 2
-    or cl, dl
+    lea eax, [(edx*8)-8]
+    or cl, al
+    bswap ecx
     mov [rdi+6], ecx
     mov rax, 10
     ret
