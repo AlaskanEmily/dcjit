@@ -7,5 +7,5 @@ set "DCJITCLTEST=%TMP%\bat~%RANDOM%.tmp"
 cl 2> %DCJITCLTEST% > nul
 find "for x64" %DCJITCLTEST% > nul && set "DCJITARCH=amd64" || set "DCJITARCH=x86"
 cd src
-nmake.exe /nologo /f nmakefile DCJITARCH=%DCJITARCH% %* && copy /B dc.exe ..\dc.exe > nul || echo FAILED
+nmake.exe /nologo /f nmakefile DCJITARCH=%DCJITARCH% %* && copy /B dc.exe ..\dc.exe > nul && cd ..\test && nmake.exe /nologo /f nmakefile && dcjit_test || echo FAILED
 cd ..

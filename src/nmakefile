@@ -1,7 +1,7 @@
 # Any copyright is dedicated to the Public Domain.
 # http://creativecommons.org/publicdomain/zero/1.0/
 
-all: dc.exe
+all: dc.exe dcjit.dll
 
 CLFLAGS=/nologo /W3 /EHsc /Zi /MT /O2
 CL=cl
@@ -61,8 +61,14 @@ DCJITBACKEND=$(DCJITARCH)_win32
 # DCJITBACKEND=soft
 
 DCJITLIBRARY=dcjit_$(DCJITBACKEND).lib
+dcjit.dll: dc_core.obj $(DCJITLIBRARY)
+	$(LINK) $(LINKFLAGS) /SUBSYSTEM:WINDOWS /DLL dc_core.obj $(DCJITLIBRARY) /OUT:dcjit.dll
+	@mkdir ..\lib > nul || echo > nul
+	@copy dcjit.dll ..\lib\dcjit.dll > nul
+	@copy dcjit.lib ..\lib\dcjit.lib > nul
+
 dc.exe: $(OBJECTS) $(DCJITLIBRARY)
-	$(LINK) $(LINKFLAGS) $(OBJECTS) $(DCJITLIBRARY) /OUT:dc.exe
+	$(LINK) $(LINKFLAGS) $(OBJECTS) $(DCJITLIBRARY) /SUBSYSTEM:CONSOLE /OUT:dc.exe
 
 clean:
 	@del /Q *.obj 2> nul || echo ""> nul

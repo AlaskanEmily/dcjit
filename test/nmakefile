@@ -1,0 +1,19 @@
+
+all: dcjit_test.exe dcjit.dll
+
+CLFLAGS=/nologo /W3 /EHsc /Zi /MT /O2 /I..\src
+CL=cl
+LINK=link
+LINKFLAGS=/NOLOGO /DEBUG 
+
+dcjit.lib: ..\lib\dcjit.lib
+	@copy ..\lib\dcjit.lib dcjit.lib
+
+dcjit.dll: ..\lib\dcjit.dll
+	@copy ..\lib\dcjit.dll dcjit.dll
+
+dcjit_test.obj: dcjit_test.c dcjit_test.h ..\src\dc.h
+	$(CL) $(CLFLAGS) /c dcjit_test.c
+
+dcjit_test.exe: dcjit.lib dcjit_test.obj
+	$(LINK) $(LINKFLAGS) dcjit.lib dcjit_test.obj /OUT:dcjit_test.exe
