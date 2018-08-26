@@ -679,6 +679,65 @@ struct DC_Calculation *DC_Compile(struct DC_Context *dc_ctx,
     return 0;
 }
 
+int DC_CompileCalculations(struct DC_Context *dc_ctx,
+    int flags,
+    unsigned num_calculations,
+    const char *const *sources,
+    unsigned *num_args,
+    const char *const *const *arg_names_array,
+    struct DC_Calculation **out_calculations,
+    const char **out_error){
+    
+    struct DC_X_Context *const ctx = (struct DC_X_Context *)dc_ctx;
+    char error_msg[0x100];
+    unsigned i, first_error = 0;
+    
+    for(i = 0; i < num_calculations; i++){
+        struct DC_X_CalculationBuilder *const bld =
+            DC_X_CreateCalculationBuilder(ctx);
+        const char *source = skip_whitespace(sources[i]);
+        const unsigned nargs = num_args[i];
+        const char *const *const args = arg_names_array[i];
+        union TermType term;
+        const enum TermResultType type =
+            parse_add_ops(ctx, bld, error_msg, &source, nargs, args, &term);
+        if(type == eTermImmediate){
+            DC_X_BuildPushImmediate(ctx, bld, (float)term.immediate);
+            out_calculations[i] = (struct DC_Calculation *)
+                DC_X_FinalizeCalculation(ctx, bld);
+            out_error[i] = NULL;
+        }
+        else if(type == eTermArgument){
+            DC_X_BuildPushArg(ctx, bld, term.argument);
+            out_calculations[i] = (struct DC_Calculation *)
+                DC_X_FinalizeCalculation(ctx, bld);
+            out_error[i] = NULL;
+        }
+        else if(type == eTermPushed){
+            out_calculations[i] = (struct DC_Calculation *)
+                DC_X_FinalizeCalculation(ctx, bld);
+            out_error[i] = NULL;
+        }
+        else{
+            const unsigned error_len = (unsigned)strnlen(error_msg, 0x100);
+            char *const error_txt = malloc(error_len+1);
+            out_error[i] = memcpy(error_txt, error_msg, error_len);
+            error_txt[error_len] = '\0';
+            out_calculations[i] = NULL;
+            
+            first_error = i+1;
+            if((flags & DC_COMPILE_KEEP_GOING) == 0){
+                while(++i < num_calculations){
+                    out_calculations[i] = NULL;
+                    out_error[i] = NULL;
+                }
+            }
+        }
+    }
+    return first_error;
+}
+
+
 void DC_FreeError(const char *error){
     free((void*)error);
 }
