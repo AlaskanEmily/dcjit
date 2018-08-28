@@ -24,7 +24,6 @@ PLATFORM?=unix
 BACKEND?=$(ARCH)_$(PLATFORM)
 #BACKEND?=soft
 
-
 dc_main.o: dc_main.c dc.h
 	$(CC) $(CFLAGS) -c dc_main.c -o dc_main.o
 
@@ -43,6 +42,9 @@ libdcjit_soft.a: dc_soft.o
 dc_jit_unix.o: dc_jit_unix.c dc_jit.h
 	$(CC) $(CFLAGS) -c dc_jit_unix.c -o dc_jit_unix.o
 
+dc_jit_haiku.o: dc_jit_haiku.cpp dc_jit.h
+	$(CXX) $(CXXFLAGS) -c dc_jit_haiku.cpp -o dc_jit_haiku.o
+
 # JIT arch components
 dc_jit_x86.o: dc_jit_x86.s
 	yasm -f elf32 -Worphan-labels dc_jit_x86.s
@@ -57,6 +59,10 @@ dc_jit.o: dc_jit.c dc_jit.h dc_backend.h
 libdcjit_x86_unix.a: dc_jit_x86.o dc_jit_unix.o dc_jit.o
 	$(AR) rc libdcjit_x86_unix.a dc_jit_x86.o dc_jit_unix.o dc_jit.o
 	$(RANLIB) libdcjit_x86_unix.a
+
+libdcjit_x86_haiku.a: dc_jit_x86.o dc_jit_haiku.o dc_jit.o
+	$(AR) rc libdcjit_x86_haiku.a dc_jit_x86.o dc_jit_haiku.o dc_jit.o
+	$(RANLIB) libdcjit_x86_haiku.a
 
 # Emscripten components
 dc_js.o: dc_js.cpp dc_backend.h
