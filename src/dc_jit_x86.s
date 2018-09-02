@@ -177,9 +177,7 @@ dc_asm_immediate_one:
     ; movss xmm0, [esp-4]
     mov [eax], WORD 0xE8D9
     mov [eax+2], DWORD 0xFC245CD9
-    shl cl, 3
-    add cl, 0x44
-    or ecx, 0xF30F1000
+    lea ecx, [(ecx * 8) + 0xF30F1044]
     bswap ecx
     mov [eax+6], ecx
     mov [eax+10], WORD 0xFC24 
@@ -217,8 +215,7 @@ _DC_ASM_WriteImmediate:
     mov [eax], DWORD 0xFC24448D
     mov [eax+4], WORD 0x00C7
     mov [eax+6], edx
-    shl cl, 3
-    or ecx, 0xF30F1000
+    lea ecx [(ecx * 8) + 0xF30F1000]
     bswap ecx
     mov [eax+10], ecx
     mov eax, 14
@@ -332,8 +329,7 @@ dc_asm_x87_trig:
     ; fstp (DWORD) [eax]
     ; movss xmm0, [eax]
     mov [eax], DWORD 0xFC24448D ; lea eax, [esp-4]
-    shl cl, 3
-    or ecx, 0xF30F1100
+    lea ecx, [(ecx * 8) + 0xF30F1100]
     bswap ecx
     mov [eax+4], ecx ; movss [eax], XMM
     pop edx ; Get the sin/cos byte
@@ -413,9 +409,9 @@ dc_asm_write_arg_arithmetic:
     ; Get the arg number
     mov ecx, [esp+8]
     
-    cmp ecx, 0
-    jz dc_asm_write_zero_arg_arithmetic
     shl cl, 2
+    jz dc_asm_write_zero_arg_arithmetic
+    
     or dl, 0x40
     bswap edx
     mov [eax], edx
