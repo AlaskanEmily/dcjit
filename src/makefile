@@ -46,6 +46,14 @@ dc_jit_unix.o: dc_jit_unix.c dc_jit.h
 dc_jit_haiku.o: dc_jit_haiku.cpp dc_jit.h
 	$(CXX) $(CXXFLAGS) -c dc_jit_haiku.cpp -o dc_jit_haiku.o
 
+dc_jit_win32.o: dc_jit_win32.c dc_jit.h
+	$(CC) $(CFLAGS) -c dc_jit_win32.c -o dc_jit_win32.o
+
+# This object provides calling convention conversions from the Win64 ABI to
+# the SysV ABI calling convention that dc_jit_amd64 implements.
+dc_jit_win64.o: dc_jit_win64.s
+	yasm -f $(YASMOBJ)64 -Worphan-labels dc_jit_win64.s -o dc_jit_win64.o
+
 # JIT arch components
 dc_jit_x86.o: dc_jit_x86.s
 	yasm -f $(YASMOBJ)32 -Worphan-labels dc_jit_x86.s -o dc_jit_x86.o
@@ -57,16 +65,36 @@ dc_jit_amd64.o: dc_jit_amd64.s
 dc_jit.o: dc_jit.c dc_jit.h dc_backend.h
 	$(CC) $(CFLAGS) -c dc_jit.c -o dc_jit.o
 
-libdcjit_x86_unix.a: dc_jit_x86.o dc_jit_unix.o dc_jit.o
-	$(AR) rc libdcjit_x86_unix.a dc_jit_x86.o dc_jit_unix.o dc_jit.o
+# Unix
+X86_OBJECTS=dc_jit_x86.o
+AMD64_OBJECTS=dc_jit_amd64.o
+UNIX_OBJECTS=dc_jit_unix.o
+HAIKU_OBJECTS=dc_jit_haiku.o
+WIN32_OBJECTS=dc_jit_win32.o
+WIN64_OBJECTS=dc_jit_win64.o $(WIN32_OBJECTS)
+COMMON_OBJECTS=dc_jit.o
+
+# Unix
+libdcjit_x86_unix.a: $(X86_OBJECTS) $(UNIX_OBJECTS) $(COMMON_OBJECTS)
+	$(AR) rc libdcjit_x86_unix.a $(X86_OBJECTS) $(UNIX_OBJECTS) $(COMMON_OBJECTS)
 	$(RANLIB) libdcjit_x86_unix.a
 
-libdcjit_amd64_unix.a: dc_jit_amd64.o dc_jit_unix.o dc_jit.o
-	$(AR) rc libdcjit_amd64_unix.a dc_jit_amd64.o dc_jit_unix.o dc_jit.o
+libdcjit_amd64_unix.a: $(AMD64_OBJECTS) $(UNIX_OBJECTS) $(COMMON_OBJECTS)
+	$(AR) rc libdcjit_amd64_unix.a $(AMD64_OBJECTS) $(UNIX_OBJECTS) $(COMMON_OBJECTS)
 	$(RANLIB) libdcjit_amd64_unix.a
 
-libdcjit_x86_haiku.a: dc_jit_x86.o dc_jit_haiku.o dc_jit.o
-	$(AR) rc libdcjit_x86_haiku.a dc_jit_x86.o dc_jit_haiku.o dc_jit.o
+# Windows
+libdcjit_x86_win32.a: $(X86_OBJECTS) $(WIN32_OBJECTS) $(COMMON_OBJECTS)
+	$(AR) rc libdcjit_x86_win32.a $(AMD64_OBJECTS) $(WIN32_OBJECTS) $(COMMON_OBJECTS)
+	$(RANLIB) libdcjit_x86_win32.a
+
+libdcjit_amd64_win64.a: $(AMD64_OBJECTS) $(WIN64_OBJECTS) $(COMMON_OBJECTS)
+	$(AR) rc libdcjit_amd64_win64.a $(AMD64_OBJECTS) $(WIN64_OBJECTS) $(COMMON_OBJECTS)
+	$(RANLIB) libdcjit_amd64_win64.a
+
+# Haiku
+libdcjit_x86_haiku.a: $(X86_OBJECTS) $(HAIKU_OBJECTS) $(COMMON_OBJECTS)
+	$(AR) rc libdcjit_x86_haiku.a $(X86_OBJECTS) $(HAIKU_OBJECTS) $(COMMON_OBJECTS)
 	$(RANLIB) libdcjit_x86_haiku.a
 
 # Emscripten components

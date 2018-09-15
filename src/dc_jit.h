@@ -22,7 +22,7 @@ extern "C" {
 #endif
 
 
-#if defined WIN64 || defined _WIN64
+#if defined WIN64 || defined _WIN64 || ( defined __CYGWIN__ && defined __amd64 )
     #define C_DEMANGLE_NAME(X) X ## _Win64
 #else
     #define C_DEMANGLE_NAME(X) X
