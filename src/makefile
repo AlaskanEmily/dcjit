@@ -21,6 +21,7 @@ RANLIB?=ranlib
 
 ARCH?=x86
 PLATFORM?=unix
+YASMOBJ?=elf
 BACKEND?=$(ARCH)_$(PLATFORM)
 #BACKEND?=soft
 
@@ -47,10 +48,10 @@ dc_jit_haiku.o: dc_jit_haiku.cpp dc_jit.h
 
 # JIT arch components
 dc_jit_x86.o: dc_jit_x86.s
-	yasm -f elf32 -Worphan-labels dc_jit_x86.s
+	yasm -f $(YASMOBJ)32 -Worphan-labels dc_jit_x86.s -o dc_jit_x86.o
 
 dc_jit_amd64.o: dc_jit_amd64.s
-	yasm -f elf64 -Worphan-labels dc_jit_amd64.s
+	yasm -f $(YASMOBJ)64 -Worphan-labels dc_jit_amd64.s -o dc_jit_amd64.o
 
 # General JIT components
 dc_jit.o: dc_jit.c dc_jit.h dc_backend.h
@@ -59,6 +60,10 @@ dc_jit.o: dc_jit.c dc_jit.h dc_backend.h
 libdcjit_x86_unix.a: dc_jit_x86.o dc_jit_unix.o dc_jit.o
 	$(AR) rc libdcjit_x86_unix.a dc_jit_x86.o dc_jit_unix.o dc_jit.o
 	$(RANLIB) libdcjit_x86_unix.a
+
+libdcjit_amd64_unix.a: dc_jit_amd64.o dc_jit_unix.o dc_jit.o
+	$(AR) rc libdcjit_amd64_unix.a dc_jit_amd64.o dc_jit_unix.o dc_jit.o
+	$(RANLIB) libdcjit_amd64_unix.a
 
 libdcjit_x86_haiku.a: dc_jit_x86.o dc_jit_haiku.o dc_jit.o
 	$(AR) rc libdcjit_x86_haiku.a dc_jit_x86.o dc_jit_haiku.o dc_jit.o
