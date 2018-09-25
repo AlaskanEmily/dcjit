@@ -24,14 +24,20 @@ extern "C" {
 
 #if defined WIN64 || defined _WIN64 || ( defined __CYGWIN__ && defined __amd64 )
     #define C_DEMANGLE_NAME(X) X ## _Win64
+    #define DCJIT_IS_WINDOWS 1
 #else
     #define C_DEMANGLE_NAME(X) X
+    #define DCJIT_IS_WINDOWS 0
 #endif
 
 #ifdef __GNUC__
-#define DCJIT_CDECL(X) __attribute__((cdecl)) C_DEMANGLE_NAME(X)
+    #if DCJIT_IS_WINDOWS
+        #define DCJIT_CDECL(X) __attribute__((cdecl)) C_DEMANGLE_NAME(X)
+    #else
+        #define DCJIT_CDECL(X) X
+    #endif
 #else
-#define DCJIT_CDECL(X) _cdecl C_DEMANGLE_NAME(X)
+    #define DCJIT_CDECL(X) _cdecl C_DEMANGLE_NAME(X)
 #endif
 
 /* Implemented by the platform memory backend. This is mmap on Unix. */
