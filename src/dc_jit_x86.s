@@ -215,7 +215,7 @@ _DC_ASM_WriteImmediate:
     mov [eax], DWORD 0xFC24448D
     mov [eax+4], WORD 0x00C7
     mov [eax+6], edx
-    lea ecx [(ecx * 8) + 0xF30F1000]
+    lea ecx, [(ecx * 8) + 0xF30F1000]
     bswap ecx
     mov [eax+10], ecx
     mov eax, 14
