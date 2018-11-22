@@ -100,7 +100,7 @@ int main(int argc, char **argv){
         
         if(at != 0){
             const char *err = NULL;
-            struct DC_Calculation *const calc = DC_Compile(ctx,
+            struct DC_Calculation *const calc = DC_CompileCalculation(ctx,
                     buffer,
                     num_args,
                     (const char*const *)argument_names,

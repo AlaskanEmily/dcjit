@@ -25,17 +25,59 @@ YASMOBJ?=elf
 BACKEND?=$(ARCH)_$(PLATFORM)
 #BACKEND?=soft
 
+# This is a hack so that you can run:
+# make BUILDROOTFINDER=no
+# And the library will be compiled without bytecode support, UNLESS this is the intpreter.
+# See the rule for "no" to see how this is done.
+BUILDROOTFINDER?=libdcrootfind.a librealbytecode.a
+BYTECODEROOTFINDLIBS=$(BUILDROOTFINDER)
+
 dc_main.o: dc_main.c dc.h
 	$(CC) $(CFLAGS) -c dc_main.c -o dc_main.o
 
-dc_core.o: dc_core.c dc.h dc_backend.h
+dc_core.o: dc_core.c dc.h dc_backend.h dc_bc.h
 	$(CC) $(CFLAGS) -c dc_core.c -o dc_core.o
+
+# Bytecode components
+dc_bc.o: dc_bc.cpp dc_bc.h dc_bytecode.hpp
+	$(CXX) $(CXXFLAGS) -c dc_bc.cpp -o dc_bc.o
+
+dc_bytecode.o: dc_bytecode.cpp dc_bytecode.hpp
+	$(CXX) $(CXXFLAGS) -c dc_bytecode.cpp -o dc_bytecode.o
+
+dc_bc_dummy.o: dc_bc_dummy.c dc_bc.h
+	$(CC) $(CFLAGS) -c dc_bc_dummy.c -o dc_bc_dummy.o
+
+BYTECODEOBJECTS=dc_bytecode.o dc_bc.o
+
+# HACK: This is used for ROOTFINDLIB=no to disable the root-finding functions
+# This rule builds a bytecode lib and then installs it as "no". We need this check because on the
+# interpreter, we still require bytecode support.
+#
+# We can't simply add the bytecode objects to the soft backend, since that would cause linker
+# errors due to duplicate symbols.
+no:
+	if [ "$(BACKEND)" = "soft" ]; then $(MAKE) real_bytecodelib ; else $(MAKE) dummy_bytecodelib ; fi
+
+real_bytecodelib: librealbytecode.a
+	install -C librealbytecode.a no
+
+dummy_bytecodelib: libdummybytecode.a
+	install -C libdummybytecode.a no
+
+librealbytecode.a: dc_bytecode.o dc_bc.o
+	$(AR) rc librealbytecode.a dc_bytecode.o dc_bc.o
+	$(RANLIB) librealbytecode.a
+
+libdummybytecode.a: dc_bc_dummy.o
+	$(AR) rc libdummybytecode.a dc_bc_dummy.o
+	$(RANLIB) libdummybytecode.a
 
 # Soft components
 dc_soft.o: dc_soft.cpp dc_backend.h
 	$(CXX) $(CXXFLAGS) -c dc_soft.cpp -o dc_soft.o
 
-libdcjit_soft.a: dc_soft.o
+libdcjit_soft.a: dc_soft.o $(BYTECODEOBJECTS)
 	$(AR) rc libdcjit_soft.a dc_soft.o
 	$(RANLIB) libdcjit_soft.a
 
@@ -107,11 +149,11 @@ libdcjit_js.a: dc_js.o
 
 OBJECTS=dc_main.o dc_core.o
 
-dc$(SO): $(OBJECTS) libdcjit_$(BACKEND).a
-	$(CXX) $(LINKFLAGS) -shared dc_core.o libdcjit_$(BACKEND).a -o dc$(SO)
+dc$(SO): $(OBJECTS) libdcjit_$(BACKEND).a $(BYTECODEROOTFINDLIBS)
+	$(CXX) $(LINKFLAGS) -shared dc_core.o libdcjit_$(BACKEND).a $(BYTECODEROOTFINDLIBS) -o dc$(SO)
 
-dc$(EXT): $(OBJECTS) libdcjit_$(BACKEND).a
-	$(CXX) $(LINKFLAGS) $(OBJECTS) libdcjit_$(BACKEND).a -o dc$(EXT)
+dc$(EXT): $(OBJECTS) libdcjit_$(BACKEND).a $(BYTECODEROOTFINDLIBS)
+	$(CXX) $(LINKFLAGS) $(OBJECTS) libdcjit_$(BACKEND).a $(BYTECODEROOTFINDLIBS) -o dc$(EXT)
 
 emscripten: dc$(SO)
 	cat dc_jit_js.js dc$(SO) > libdc.js

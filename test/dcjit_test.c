@@ -14,7 +14,7 @@ static int run_calculation(const char *source,
     const char *err;
     struct DC_Context *const ctx = DC_CreateContext();
     struct DC_Calculation *const calc =
-        DC_Compile(ctx, source, num_args, arg_names, &err);
+        DC_CompileCalculation(ctx, source, num_args, arg_names, &err);
     
     if(err == NULL)
         YYY_ASSERT_TRUE(calc != NULL);
@@ -45,7 +45,7 @@ static int fail_calculation(const char *source,
     const char *err;
     struct DC_Context *const ctx = DC_CreateContext();
     struct DC_Calculation *const calc =
-        DC_Compile(ctx, source, num_args, arg_names, &err);
+        DC_CompileCalculation(ctx, source, num_args, arg_names, &err);
 
     if(err == NULL)
         YYY_ASSERT_TRUE(calc != NULL);

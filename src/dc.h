@@ -45,6 +45,19 @@ struct DC_Calculation;
 typedef struct DC_Calculation *DC_CalculationPtr;
 
 /**
+ * @brief Optional bytecode representation of a calculation.
+ *
+ * This is used for the root-finding API (when enabled).
+ *
+ * The interpreter backend also makes use of this, but using the bytecode for
+ * this explicitly is not exposed in the public API.
+ */
+struct DC_Bytecode;
+typedef struct DC_Bytecode *DC_BytecodePtr;
+
+void DC_API DC_FreeBytecode(struct DC_Bytecode *bc);
+
+/**
  * @brief Creates a context.
  */
 DC_ContextPtr DC_API DC_CreateContext(void);
@@ -95,11 +108,57 @@ void DC_API DC_FreeContext(struct DC_Context *ctx);
  * @param out_error Receives an error if the compilation fails
  * @return new calculation, or NULL if an error has occured
  */
-DC_CalculationPtr DC_API DC_Compile(struct DC_Context *ctx,
+DC_CalculationPtr DC_API DC_CompileCalculation(struct DC_Context *ctx,
     const char *source,
     unsigned num_args,
     const char *const *arg_names,
     const char **out_error);
+
+/**
+ * @brief Generate bytecide for a calculation.
+ *
+ * @note Bytecode is only used for the root-finding API.
+ *
+ * Bytecode is not used for running any calculations.
+ *
+ * @param ctx The context to compile the calcuation in.
+ * @param source Source code for the calculation
+ * @param num_args Number of arguments to the calculation
+ * @param arg_names Aliases for the arguments to the calculation
+ * @param out_error Receives an error if the compilation fails
+ * @return Bytecode, or NULL if an error has occured
+ *
+ * @sa DC_Compile
+ */
+DC_BytecodePtr DC_API DC_CompileBytecode(struct DC_Context *ctx,
+    const char *source,
+    unsigned num_args,
+    const char *const *arg_names,
+    const char **out_error);
+
+/**
+ * @brief Compile a calculation to machine code and/or bytecode.
+ *
+ * This is equivalent to DC_CompileCalculation but also produces bytecode.
+ *
+ * @param ctx The context to compile the calcuation in.
+ * @param source Source code for the calculation
+ * @param num_args Number of arguments to the calculation
+ * @param arg_names Aliases for the arguments to the calculation
+ * @param out_error Receives an error if the compilation fails
+ * @param out_optional_calculation Calculation, or NULL if an error has occured
+ * @param out_optional_bytecode Bytecode, or NULL if an error has occured
+ *
+ * @sa DC_CompileCalculation
+ * @sa DC_CompileBytecode
+ */
+void DC_API DC_Compile(struct DC_Context *ctx,
+    const char *source,
+    unsigned num_args,
+    const char *const *arg_names,
+    const char **out_error,
+    DC_CalculationPtr *out_optional_calculation,
+    DC_BytecodePtr *out_optional_bytecode);
 
 /**
  * @brief Compiles a set of calculations.
@@ -112,6 +171,10 @@ DC_CalculationPtr DC_API DC_Compile(struct DC_Context *ctx,
  * Ordinarily, this function will halt immediately if a calculation cannot be
  * compiled. If @p flags includes DC_COMPILE_KEEP_GOING then compilation will
  * continue.
+ *
+ * @note There is no method to batch-generate bytecode. This is because there
+ *   is no significant benefit over calling DC_CompileCalculations for all the
+ *   calculations, and then calling DC_CompileBytecode in a loop.
  *
  * @param ctx The context to compile the calcuations in.
  * @param flags bitwise-or'ed flags for compilation.

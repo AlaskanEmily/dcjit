@@ -10,6 +10,7 @@
  */
 
 #include "dc.h"
+#include "dc_bc.h"
 #include "dc_backend.h"
 
 /* needed for strncpy on some systems */
@@ -123,6 +124,18 @@ typedef void (*build_push_imm_operation)(struct DC_X_Context*,
     struct DC_X_CalculationBuilder*,
     float);
 
+/* Typedef for bytecode operations on fully pushed values. */
+typedef void (*bytecode_push_operation)(struct DC_Bytecode*);
+/* Typedef for bytecode operations with one pushed value and one
+ * argument. */
+typedef void (*bytecode_push_arg_operation)(struct DC_Bytecode*,
+    unsigned short);
+/* Typedef for operations to calculate results with one pushed value and one
+ * immediate value. Note that if both values are immediate, the
+ * arithmetic_operation callback is used and the immediate result is propagated
+ * upward through the parser. */
+typedef void (*bytecode_push_imm_operation)(struct DC_Bytecode*,float);
+
 /* Immediate operation to add. */
 static double arithmetic_operation_add(double a, double b) { return a + b; }
 /* Immediate operation to subtract. */
@@ -148,10 +161,16 @@ struct ParseOperation {
     /* Callback for this operator with one pushed value and one argument. */
     build_push_arg_operation build_arg_op;
     build_push_imm_operation build_imm_op;
+    /* Callback for bytecode with two pushed values. */
+    bytecode_push_operation bytecode_op;
+    /* Callback for bytecode with one pushed value and one argument. */
+    bytecode_push_arg_operation bytecode_arg_op;
+    bytecode_push_imm_operation bytecode_imm_op;
 };
 
 #define DC_BUILD_OPS(NAME)\
-    DC_X_Build ## NAME, DC_X_Build ## NAME ## Arg, DC_X_Build ## NAME ## Imm
+    DC_X_Build ## NAME, DC_X_Build ## NAME ## Arg, DC_X_Build ## NAME ## Imm,\
+    DC_BC_Build ## NAME, DC_BC_Build ## NAME ## Arg, DC_BC_Build ## NAME ## Imm
 
 /* ParseOperation data for mul_ops 
  * TODO: Remainder will go here.
@@ -173,6 +192,7 @@ static const struct ParseOperation dc_add_ops[DC_NUM_ADD_OPS] = {
 typedef double(*unary_operation)(double);
 typedef enum TermResultType(*parser_callback)(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
@@ -185,6 +205,41 @@ DC_ContextPtr DC_API_CALL DC_CreateContext(void){
 
 void DC_API_CALL DC_FreeContext(struct DC_Context *ctx){
     DC_X_FreeContext((struct DC_X_Context *)ctx);
+}
+
+void DC_API DC_FreeBytecode(struct DC_Bytecode *bc){
+    DC_BC_FreeBytecode(bc);
+}
+
+static void dc_build_push_arg(struct DC_X_Context *ctx, 
+    struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
+    unsigned short arg){
+    if(bld != NULL)
+        DC_X_BuildPushArg(ctx, bld, arg);
+    if(bc != NULL)
+        DC_BC_BuildPushArg(bc, arg);
+}
+
+static void dc_build_push_imm(struct DC_X_Context *ctx, 
+    struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
+    float imm){
+    if(bld != NULL)
+        DC_X_BuildPushImmediate(ctx, bld, imm);
+    if(bc != NULL)
+        DC_BC_BuildPushImmediate(bc, imm);
+}
+
+static void dc_build_push_op(struct DC_X_Context *ctx, 
+    struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
+    build_push_operation calc_operation,
+    bytecode_push_operation bc_operation){
+    if(bld != NULL)
+        calc_operation(ctx, bld);
+    if(bc != NULL)
+        bc_operation(bc);
 }
 
 /* Skips whitespace. */
@@ -281,6 +336,7 @@ union TermResult {
 /* This is the general entry point to parse an expression */
 static enum TermResultType parse_add_ops(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
@@ -388,6 +444,7 @@ static enum TermResultType parse_value(const char **source_ptr,
  */
 static enum TermResultType parse_parens(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
@@ -398,6 +455,7 @@ static enum TermResultType parse_parens(struct DC_X_Context *ctx,
         const char *source = skip_whitespace(source_ptr[0]+1);
         const enum TermResultType type = parse_add_ops(ctx,
             bld,
+            bc,
             error_text,
             &source,
             num_args,
@@ -423,38 +481,40 @@ static enum TermResultType parse_parens(struct DC_X_Context *ctx,
  * to perform on that operation or to push to the JIT. */
 static enum TermResultType builtin(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
     const char *const *arg_names,
     union TermType *out_term,
     unary_operation immediate_operation,
-    build_push_operation operation){
+    build_push_operation calc_operation,
+    bytecode_push_operation bc_operation){
     
     /* Builtins are: <atom> '(' <expression> ')'
      * The atom should already have been consumed, so we can begin by parsing
      * the parenthesized expression.
      */
     const enum TermResultType type = parse_parens(ctx,
-        bld, error_text, source_ptr, num_args, arg_names, out_term);
+        bld, bc, error_text, source_ptr, num_args, arg_names, out_term);
     if(type == eTermImmediate){
         /* If intrinsics can be optimized, then we can apply the operation */
         if(DC_OPTIMIZE_INTRINSIC){
             out_term->immediate = immediate_operation(out_term->immediate);
         }
         else{
-            DC_X_BuildPushImmediate(ctx, bld, (float)out_term->immediate);
-            operation(ctx, bld);
+            dc_build_push_imm(ctx, bld, bc, (float)out_term->immediate);
+            dc_build_push_op(ctx, bld, bc, calc_operation, bc_operation);
             return eTermPushed;
         }
     }
     else if(type == eTermArgument){
-        DC_X_BuildPushArg(ctx, bld, out_term->argument);
-        operation(ctx, bld);
+        dc_build_push_arg(ctx, bld, bc, out_term->argument);
+        dc_build_push_op(ctx, bld, bc, calc_operation, bc_operation);
         return eTermPushed;
     }
     else if(type == eTermPushed){
-        operation(ctx, bld);
+        dc_build_push_op(ctx, bld, bc, calc_operation, bc_operation);
     }
     return type;
 }   
@@ -463,6 +523,7 @@ static enum TermResultType builtin(struct DC_X_Context *ctx,
  * builtin operation */
 static enum TermResultType parse_term(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
@@ -474,7 +535,7 @@ static enum TermResultType parse_term(struct DC_X_Context *ctx,
     /* Check for a parentheszied expression. */
     if(**source_ptr == '('){
         return parse_parens(ctx,
-            bld, error_text, source_ptr, num_args, arg_names, out_term);
+            bld, bc, error_text, source_ptr, num_args, arg_names, out_term);
     }
 
     /* Builtins are <atom> '(' <expression> ')'
@@ -483,14 +544,14 @@ static enum TermResultType parse_term(struct DC_X_Context *ctx,
 #define DC_BUILTIN(NAME, IMMEDIATE, PUSH) do{\
         if(strncmp(*source_ptr, ( NAME "(" ), sizeof(NAME))==0){\
             source_ptr[0] += sizeof(NAME) - 1;\
-            return builtin(ctx, bld, error_text, source_ptr, num_args,\
-                arg_names, out_term, (IMMEDIATE), (PUSH));\
+            return builtin(ctx, bld, bc, error_text, source_ptr, num_args,\
+                arg_names, out_term, (IMMEDIATE), DC_X_ ## PUSH, DC_BC_ ## PUSH);\
         }\
     }while(0)
 
-    DC_BUILTIN("sin", arithmetic_operation_sin, DC_X_BuildSin);
-    DC_BUILTIN("cos", arithmetic_operation_cos, DC_X_BuildCos);
-    DC_BUILTIN("sqrt", arithmetic_operation_sqrt, DC_X_BuildSqrt);
+    DC_BUILTIN("sin", arithmetic_operation_sin, BuildSin);
+    DC_BUILTIN("cos", arithmetic_operation_cos, BuildCos);
+    DC_BUILTIN("sqrt", arithmetic_operation_sqrt, BuildSqrt);
     
     /* If it wasn't a builtin or a parenthesized expression, it is a value. */
     type = parse_value(source_ptr, num_args, arg_names, &result);
@@ -529,7 +590,7 @@ static enum TermResultType parse_term(struct DC_X_Context *ctx,
                 out_term->immediate = result.term.immediate;
             }
             else{
-                DC_X_BuildPushImmediate(ctx, bld, (float)result.term.immediate);
+                dc_build_push_imm(ctx, bld, bc, (float)result.term.immediate);
                 type = eTermPushed;
             }
             break;
@@ -538,7 +599,7 @@ static enum TermResultType parse_term(struct DC_X_Context *ctx,
                 out_term->argument = result.term.argument;
             }
             else{
-                DC_X_BuildPushArg(ctx, bld, result.term.argument);
+                dc_build_push_arg(ctx, bld, bc, result.term.argument);
                 type = eTermPushed;
             }
             break;
@@ -550,6 +611,7 @@ static enum TermResultType parse_term(struct DC_X_Context *ctx,
 
 static enum TermResultType parse_generic(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
@@ -562,7 +624,7 @@ static enum TermResultType parse_generic(struct DC_X_Context *ctx,
     union TermType term;
     const char *source;
     enum TermResultType type = parse_callback(
-        ctx, bld, error_text, source_ptr, num_args, arg_names, &term);
+        ctx, bld, bc, error_text, source_ptr, num_args, arg_names, &term);
     
     switch(type){
         case eTermPushed:
@@ -582,8 +644,12 @@ static enum TermResultType parse_generic(struct DC_X_Context *ctx,
                         /* Skip past the operator. */
                         source = skip_whitespace(++source);
                         
-                        next_type = parse_callback(ctx, bld, error_text, &source,
-                            num_args, arg_names, &next_term);
+                        next_type = parse_callback(ctx, bld, bc,
+                            error_text,
+                            &source,
+                            num_args,
+                            arg_names,
+                            &next_term);
                         
                         if(next_type == eTermImmediate){
                             if(type == eTermImmediate){
@@ -597,7 +663,8 @@ static enum TermResultType parse_generic(struct DC_X_Context *ctx,
                                     /* TODO: We /might/ be able to label
                                      * operators that are transitive and
                                      * re-order the arguments here. */
-                                    DC_X_BuildPushArg(ctx, bld, term.argument);
+                                    dc_build_push_arg(ctx,
+                                        bld, bc, term.argument);
                                     type = eTermPushed;
                                 }
                                 /* else the arg was pushed. */
@@ -605,11 +672,16 @@ static enum TermResultType parse_generic(struct DC_X_Context *ctx,
                                 /* TODO: We could parse the next term and then
                                  * flush? */
                                 if(DC_OPTIMIZE_FETCH){
-                                    operations[i].build_imm_op(ctx, bld, imm);
+                                    if(bld != NULL)
+                                        operations[i].build_imm_op(ctx, bld, imm);
+                                    if(bc != NULL)
+                                        operations[i].bytecode_imm_op(bc, imm);
                                 }
                                 else{
-                                    DC_X_BuildPushImmediate(ctx, bld, imm);
-                                    operations[i].build_op(ctx, bld);
+                                    dc_build_push_imm(ctx, bld, bc, imm);
+                                    dc_build_push_op(ctx, bld, bc,
+                                        operations[i].build_op,
+                                        operations[i].bytecode_op);
                                 }
                             }
                             break;
@@ -619,20 +691,25 @@ static enum TermResultType parse_generic(struct DC_X_Context *ctx,
                             /* Flush the first argument */
                             if(type == eTermImmediate){
                                 const float imm = (float)term.immediate;
-                                DC_X_BuildPushImmediate(ctx, bld, imm);
+                                dc_build_push_imm(ctx, bld, bc, imm);
                                 type = eTermPushed;
                             }
                             else if(type == eTermArgument){
-                                DC_X_BuildPushArg(ctx, bld, term.argument);
+                                dc_build_push_arg(ctx, bld, bc, term.argument);
                                 type = eTermPushed;
                             }
                             
                             if(DC_OPTIMIZE_FETCH){
-                                operations[i].build_arg_op(ctx, bld, arg);
+                                if(bld != NULL)
+                                    operations[i].build_arg_op(ctx, bld, arg);
+                                if(bc != NULL)
+                                    operations[i].bytecode_arg_op(bc, arg);
                             }
                             else{
-                                DC_X_BuildPushArg(ctx, bld, arg);
-                                operations[i].build_op(ctx, bld);
+                                dc_build_push_arg(ctx, bld, bc, arg);
+                                dc_build_push_op(ctx, bld, bc,
+                                    operations[i].build_op,
+                                    operations[i].bytecode_op);
                             }
                             break;
                         }
@@ -641,14 +718,16 @@ static enum TermResultType parse_generic(struct DC_X_Context *ctx,
                             /* Flush the first argument */
                             if(type == eTermImmediate){
                                 const float imm = (float)term.immediate;
-                                DC_X_BuildPushImmediate(ctx, bld, imm);
+                                dc_build_push_imm(ctx, bld, bc, imm);
                                 type = eTermPushed;
                             }
                             else if(type == eTermArgument){
-                                DC_X_BuildPushArg(ctx, bld, term.argument);
+                                dc_build_push_arg(ctx, bld, bc, term.argument);
                                 type = eTermPushed;
                             }
-                            operations[i].build_op(ctx, bld);
+                            dc_build_push_op(ctx, bld, bc,
+                                operations[i].build_op,
+                                operations[i].bytecode_op);
                             break;
                         }
                         else{
@@ -682,6 +761,7 @@ static enum TermResultType parse_generic(struct DC_X_Context *ctx,
 /* Implements parsing terms separated by `/' and `*' */
 static enum TermResultType parse_mul_ops(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
@@ -690,6 +770,7 @@ static enum TermResultType parse_mul_ops(struct DC_X_Context *ctx,
     
     return parse_generic(ctx,
         bld,
+        bc,
         error_text,
         source_ptr,
         num_args,
@@ -704,6 +785,7 @@ static enum TermResultType parse_mul_ops(struct DC_X_Context *ctx,
  * parse_mul_ops for each term. */
 static enum TermResultType parse_add_ops(struct DC_X_Context *ctx,
     struct DC_X_CalculationBuilder *bld,
+    struct DC_Bytecode *bc,
     char error_text[0x100],
     const char **source_ptr,
     unsigned num_args,
@@ -712,6 +794,7 @@ static enum TermResultType parse_add_ops(struct DC_X_Context *ctx,
     
     return parse_generic(ctx,
         bld,
+        bc,
         error_text,
         source_ptr,
         num_args,
@@ -722,40 +805,82 @@ static enum TermResultType parse_add_ops(struct DC_X_Context *ctx,
         DC_NUM_ADD_OPS);
 }
 
-DC_CalculationPtr DC_API_CALL DC_Compile(struct DC_Context *dc_ctx,
+DC_CalculationPtr DC_API_CALL DC_CompileCalculation(struct DC_Context *dc_ctx,
     const char *source,
     unsigned num_args,
     const char *const *arg_names,
     const char **out_error){
     
+    DC_CalculationPtr calc;
+    DC_Compile(dc_ctx, source, num_args, arg_names, out_error, &calc, NULL);
+    return calc;
+}
+
+DC_BytecodePtr DC_API DC_CompileBytecode(struct DC_Context *dc_ctx,
+    const char *source,
+    unsigned num_args,
+    const char *const *arg_names,
+    const char **out_error){
+    
+    DC_BytecodePtr bc;
+    DC_Compile(dc_ctx, source, num_args, arg_names, out_error, NULL, &bc);
+    return bc;
+}
+
+void DC_API DC_Compile(struct DC_Context *dc_ctx,
+    const char *source,
+    unsigned num_args,
+    const char *const *arg_names,
+    const char **out_error,
+    DC_CalculationPtr *out_optional_calculation,
+    DC_BytecodePtr *out_optional_bytecode){
+    
     struct DC_X_Context *const ctx = (struct DC_X_Context *)dc_ctx;
     char error_msg[0x100];
+    
     struct DC_X_CalculationBuilder *const bld =
-        DC_X_CreateCalculationBuilder(ctx);
+        (out_optional_calculation) ?
+        DC_X_CreateCalculationBuilder(ctx) : NULL;
+    struct DC_Bytecode *const bc =
+        (out_optional_bytecode) ?
+        DC_BC_CreateBytecode() : NULL;
     union TermType term;
     
     source = skip_whitespace(source);
+
     
     switch(parse_add_ops(ctx,
         bld,
+        bc,
         error_msg,
         &source,
         num_args,
         arg_names,
         &term)){
             case eTermImmediate:
-                DC_X_BuildPushImmediate(ctx, bld, (float)term.immediate);
+                dc_build_push_imm(ctx, bld, bc, (float)term.immediate);
                 out_error[0] = NULL;
-                return (struct DC_Calculation *)DC_X_FinalizeCalculation(ctx,
-                    bld);
+                if(out_optional_calculation){
+                    out_optional_calculation[0] =
+                        (struct DC_Calculation *)DC_X_FinalizeCalculation(ctx,
+                            bld);
+                }
+                if(out_optional_bytecode)
+                    out_optional_bytecode[0] = bc;
+                return;
             case eTermArgument:
-                DC_X_BuildPushArg(ctx, bld, term.argument);
+                dc_build_push_arg(ctx, bld, bc, term.argument);
                 /* FALLTHROUGH */
             case eTermPushed:
                 out_error[0] = NULL;
-                return (struct DC_Calculation *)DC_X_FinalizeCalculation(ctx,
-                    bld);
-                /* FALLTHROUGH */
+                if(out_optional_calculation){
+                    out_optional_calculation[0] =
+                        (struct DC_Calculation *)DC_X_FinalizeCalculation(ctx,
+                            bld);
+                }
+                if(out_optional_bytecode)
+                    out_optional_bytecode[0] = bc;
+                return;
             default:
                 {
                     const unsigned error_len =
@@ -764,11 +889,14 @@ DC_CalculationPtr DC_API_CALL DC_Compile(struct DC_Context *dc_ctx,
                     out_error[0] = memcpy(error_txt, error_msg, error_len);
                     error_txt[error_len] = '\0';
                 }
-                return NULL;
+                if(out_optional_calculation)
+                    out_optional_calculation[0] = NULL;
+                if(out_optional_bytecode)
+                    out_optional_bytecode[0] = NULL;
+                return;
     }
     fputs("INTERNAL ERROR\n", stderr);
     abort();
-    return 0;
 }
 
 int DC_API_CALL DC_CompileCalculations(struct DC_Context *dc_ctx,
@@ -791,8 +919,8 @@ int DC_API_CALL DC_CompileCalculations(struct DC_Context *dc_ctx,
         const unsigned nargs = num_args[i];
         const char *const *const args = arg_names_array[i];
         union TermType term;
-        const enum TermResultType type =
-            parse_add_ops(ctx, bld, error_msg, &source, nargs, args, &term);
+        const enum TermResultType type = parse_add_ops(ctx,
+            bld, NULL, error_msg, &source, nargs, args, &term);
         if(type == eTermImmediate){
             DC_X_BuildPushImmediate(ctx, bld, (float)term.immediate);
             out_calculations[i] = (struct DC_Calculation *)

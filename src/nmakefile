@@ -11,16 +11,19 @@ LINKFLAGS=/NOLOGO /DEBUG
 dc_main.obj: dc_main.c dc.h
 	$(CL) $(CLFLAGS) /c dc_main.c
 
-dc_core.obj: dc_core.c dc.h dc_backend.h
+dc_core.obj: dc_core.c dc.h dc_backend.h dc_bc.h
 	$(CL) $(CLFLAGS) /c dc_core.c
+
+# Bytecode components
+dc_bc.obj: dc_bc.cpp dc_bc.h dc_bytecode.hpp
+	$(CL) $(CLFLAGS) /c dc_bc.cpp
+
+dc_bytecode.obj: dc_bytecode.cpp dc_bc.h dc_bytecode.hpp
+	$(CL) $(CLFLAGS) /c dc_bytecode.cpp
 
 # Soft components
 dc_soft.obj: dc_soft.cpp dc_backend.h
 	$(CL) $(CLFLAGS) /c dc_soft.cpp
-
-libdcjit_soft.a: dc_soft.o
-	ar rc libdcjit_soft.a dc_soft.o
-	ranlib libdcjit_soft.a
 
 # JIT platform components
 dc_jit_win32.obj: dc_jit_win32.c dc_jit.h
@@ -51,22 +54,21 @@ dcjit_amd64_win32.lib: $(DCJIT_AMD64_WIN32_OBJECTS)
 	lib /nologo /OUT:dcjit_amd64_win32.lib $(DCJIT_AMD64_WIN32_OBJECTS)
 
 DCJIT_SOFT_OBJECTS=dc_soft.obj
-dcjit_soft.lib: $(DCJIT_SOFT_OBJECTS)
-	lib /nologo /OUT:dcjit_soft.lib $(DCJIT_SOFT_OBJECTS)
+dcjit_soft_win32.lib: $(DCJIT_SOFT_OBJECTS)
+	lib /nologo /OUT:dcjit_soft_win32.lib $(DCJIT_SOFT_OBJECTS)
 
-OBJECTS=dc_main.obj dc_core.obj
+DCJITOBJECTS=dc_core.obj dc_bc.obj dc_bytecode.obj
 
-# Change this to select a different backend.
 DCJITBACKEND=$(DCJITARCH)_win32
-# DCJITBACKEND=soft
 
 DCJITLIBRARY=dcjit_$(DCJITBACKEND).lib
-dcjit.dll: dc_core.obj $(DCJITLIBRARY)
-	$(LINK) $(LINKFLAGS) /SUBSYSTEM:WINDOWS /DLL dc_core.obj $(DCJITLIBRARY) /OUT:dcjit.dll
+dcjit.dll: $(DCJITOBJECTS) $(DCJITLIBRARY)
+	$(LINK) $(LINKFLAGS) /SUBSYSTEM:WINDOWS /DLL $(DCJITOBJECTS) $(DCJITLIBRARY) /OUT:dcjit.dll
 	@mkdir ..\lib > nul || echo > nul
 	@copy dcjit.dll ..\lib\dcjit.dll > nul
 	@copy dcjit.lib ..\lib\dcjit.lib > nul
 
+OBJECTS=dc_main.obj $(DCJITOBJECTS)
 dc.exe: $(OBJECTS) $(DCJITLIBRARY)
 	$(LINK) $(LINKFLAGS) $(OBJECTS) $(DCJITLIBRARY) /SUBSYSTEM:CONSOLE /OUT:dc.exe
 
